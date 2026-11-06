@@ -1,0 +1,54 @@
+{
+  "source": "zyBooks LEGv8 simulator (sandbox activity), run speed Instant, observed 2026-11-05",
+  "note": "Expected values typed from what the zyBooks simulator displayed. 'registers'/'memory' list exactly what the panels showed.",
+  "cases": [
+    {
+      "name": "P1-sdiv-negative-byte4-quirk",
+      "source": "SUBI X1, XZR, #7\nADDI X2, XZR, #2\nSDIV X3, X1, X2",
+      "initial": { "registers": {}, "memory": {} },
+      "expected": { "registers": { "X1": "-7", "X2": "2", "X3": "-547608330243", "XZR": "0" }, "memory": {}, "error": null }
+    },
+    {
+      "name": "P2-flags-computed-after-destination-write",
+      "source": "ADDI X0, XZR, #5\nADDI X1, XZR, #5\nSUBS X0, X0, X1\nB.EQ yes\nADDI X9, XZR, #1\nB end\nyes:\nADDI X9, XZR, #2\nend:",
+      "initial": { "registers": {}, "memory": {} },
+      "expected": { "registers": { "X0": "0", "X1": "5", "X9": "1", "XZR": "0" }, "memory": {}, "error": null }
+    },
+    {
+      "name": "P3-subis-signed-carry-quirk",
+      "source": "SUBI X1, XZR, #1\nSUBIS XZR, X1, #1\nB.HS yes\nADDI X9, XZR, #1\nB end\nyes:\nADDI X9, XZR, #2\nend:",
+      "initial": { "registers": {}, "memory": {} },
+      "expected": { "registers": { "X1": "-1", "X9": "1", "XZR": "0" }, "memory": {}, "error": null }
+    },
+    {
+      "name": "P4-read-creates-memory-entry",
+      "source": "LDUR X1, [XZR, #200]",
+      "initial": { "registers": {}, "memory": {} },
+      "expected": { "registers": { "X1": "0", "XZR": "0" }, "memory": { "200": "0" }, "error": null }
+    },
+    {
+      "name": "P5-bl-return-address",
+      "source": "BL f\nB end\nf:\nADDI X9, XZR, #1\nend:",
+      "initial": { "registers": {}, "memory": {} },
+      "expected": { "registers": { "X9": "1", "X30": "4", "XZR": "0" }, "memory": {}, "error": null }
+    },
+    {
+      "name": "P6-divide-by-zero-runtime-error",
+      "source": "SDIV X1, X2, XZR",
+      "initial": { "registers": {}, "memory": {} },
+      "expected": { "runtimeError": "Error: SDIV X1, X2, XZR. division by zero", "exitsSimulation": true }
+    },
+    {
+      "name": "P7-movz-immediate-range",
+      "source": "MOVZ X1, 32768, LSL 0",
+      "initial": { "registers": {}, "memory": {} },
+      "expected": { "parseError": "Line 1: 32768 is out of range. Valid range: -32768 to 32767" }
+    },
+    {
+      "name": "P8-infinite-loop-no-limit-in-ui",
+      "source": "ADDI X1, XZR, #0\nLoop:\nADDI X1, X1, #1\nB Loop",
+      "initial": { "registers": {}, "memory": {} },
+      "expected": { "ui": "Runs until Pause, no error. About 7 ms per step at Instant (X1 = 221 after about 3 s)." }
+    }
+  ]
+}

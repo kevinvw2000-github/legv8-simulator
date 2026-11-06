@@ -1,0 +1,12 @@
+# Private notes and reference material: never commit or ship
+reference/
+
+# Local-only conformance cases (e.g. graded coursework): never commit
+*.local.*
+
+node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
+.claude/
