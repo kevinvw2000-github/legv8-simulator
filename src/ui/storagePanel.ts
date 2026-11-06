@@ -2,6 +2,7 @@
 // Edit mode: a list of initial values the user can add, change and remove.
 // Simulation mode: the accessed entries (zyBooks style), with changed values highlighted.
 
+import { describeValue, formatValue, type ValueFormat } from '../core/bits';
 import { MAX_ADDRESS } from '../core/state';
 import { REGISTER_NAMES } from '../core/isa';
 
@@ -83,7 +84,8 @@ export class StoragePanel {
     this.renderEditing();
   }
 
-  showSimulation(rows: ViewRow[]): void {
+  /** Show the simulation view. Row values are signed decimal strings, displayed in `format`. */
+  showSimulation(rows: ViewRow[], format: ValueFormat = 'signed'): void {
     this.editing = false;
     this.root.classList.add('simulating');
     this.addButton.hidden = true;
@@ -94,8 +96,12 @@ export class StoragePanel {
         if (r.changed) tr.classList.add('changed');
         tr.dataset.key = r.key;
         tr.innerHTML = `<th scope="row"></th><td class="value"></td><td class="col-remove"></td>`;
+        const value = BigInt(r.value);
+        const cell = tr.children[1] as HTMLElement;
         (tr.children[0] as HTMLElement).textContent = r.key;
-        (tr.children[1] as HTMLElement).textContent = r.value;
+        if (format === 'binary') cell.append(...binaryLines(formatValue(value, format)));
+        else cell.textContent = formatValue(value, format);
+        cell.title = describeValue(value);
         return tr;
       }),
     );
@@ -209,6 +215,26 @@ export class StoragePanel {
     input.addEventListener('change', () => this.renderEditing());
     return input;
   }
+}
+
+/**
+ * Binary text (two lines of 8 nibbles) as one block per 32-bit line, each split into two
+ * 16-bit halves. CSS shows 2 lines normally and stacks the halves (4 lines) on narrow screens.
+ */
+function binaryLines(text: string): HTMLElement[] {
+  return text.split('\n').map((line) => {
+    const nibbles = line.split(' ');
+    const el = document.createElement('span');
+    el.className = 'bin-line';
+    const half = (part: string[]) => {
+      const s = document.createElement('span');
+      s.className = 'bin-half';
+      s.textContent = part.join(' ');
+      return s;
+    };
+    el.append(half(nibbles.slice(0, 4)), ' ', half(nibbles.slice(4)));
+    return el;
+  });
 }
 
 function markInvalid(el: HTMLElement, message: string): void {

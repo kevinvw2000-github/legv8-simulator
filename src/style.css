@@ -92,8 +92,12 @@ body {
 .code-pane { display: flex; flex-direction: column; min-height: 0; gap: 10px; }
 .side-pane { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; }
 
+body[data-format='binary'] .layout { grid-template-columns: minmax(0, 1fr) 400px; }
+
 @media (max-width: 860px) {
-  .layout { grid-template-columns: 1fr; height: auto; padding: 12px 16px; }
+  .layout, body[data-format='binary'] .layout { grid-template-columns: minmax(0, 1fr); height: auto; padding: 12px 16px; }
+  .topbar { flex-wrap: wrap; padding: 10px 16px; }
+  .code-pane, .side-pane { min-width: 0; }
   .editor { min-height: 360px; }
 }
 
@@ -216,6 +220,33 @@ kbd {
 .storage-table th input { text-align: left; }
 .storage-table select { font-family: var(--mono); }
 .storage-table tr.changed { background: var(--changed); }
+.storage.simulating td.value { cursor: help; }
+body[data-format='binary'] .storage.simulating td.value { font-size: 11px; line-height: 1.35; }
+.bin-line { display: block; white-space: nowrap; }
+.bin-half { white-space: pre; }
+@media (max-width: 480px) {
+  .bin-half { display: block; }
+}
+body[data-format='binary'] .storage.simulating tbody th { vertical-align: top; }
+
+/* "Show values as" segmented control */
+.format {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0; margin: 0; padding: 0; border: 0; min-width: 0;
+}
+.format legend {
+  float: left; margin-right: 10px; padding: 0; font-size: 12px; color: var(--muted);
+}
+.format label { position: relative; }
+.format input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.format span {
+  display: block; padding: 3px 10px; font-size: 12px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); margin-left: -1px;
+}
+.format label:first-of-type span { border-radius: 6px 0 0 6px; margin-left: 0; }
+.format label:last-of-type span { border-radius: 0 6px 6px 0; }
+.format input:checked + span { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); position: relative; z-index: 1; font-weight: 600; }
+.format input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 2; }
+.format label:hover span { color: var(--text); }
 .storage .invalid { border-color: var(--error); background: var(--error-soft); }
 .storage-empty { margin: 4px 0; color: var(--muted); font-size: 13px; }
 .storage.simulating thead th:last-child { display: none; }

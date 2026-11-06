@@ -34,6 +34,9 @@ npm run dev        # http://localhost:5173
 
 During simulation the panels show only the registers and memory the program has read or written, as zyBooks does.
 Values that just changed are highlighted, and the flags (N Z C V), PC (byte address) and step count are shown.
+**Show values as** switches the register and memory values between signed decimal (the zyBooks default), unsigned
+decimal, hex and binary; hex also applies to the PC. Hover over any value to see all four. Starting values are
+still entered in decimal, and Import/Export always uses decimal.
 
 **Keyboard:** <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step ·
 <kbd>F9</kbd> toggle breakpoint · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Enter/Exit simulation.

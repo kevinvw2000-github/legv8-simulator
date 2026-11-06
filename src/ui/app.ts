@@ -2,6 +2,7 @@
 
 import { Machine, RuntimeError } from '../core/machine';
 import { ParseError, parseProgram } from '../core/parser';
+import { VALUE_FORMATS, type ValueFormat } from '../core/bits';
 import type { Mode } from '../core/state';
 import { exportWorkspace, importWorkspace } from '../core/stateIO';
 import { createEditor, type CodeEditor } from './editor';
@@ -16,6 +17,8 @@ interface Saved {
   memory: Entry[];
   speed: Speed;
   mode: Mode;
+  /** How register and memory values are displayed while simulating. */
+  format: ValueFormat;
   /** 1-based source lines with a breakpoint. */
   breakpoints: number[];
 }
@@ -50,6 +53,7 @@ const DEFAULT: Saved = {
   ],
   speed: 'Fast',
   mode: 'zybooks',
+  format: 'signed',
   breakpoints: [],
 };
 
@@ -64,6 +68,7 @@ function load(): Saved {
       memory: Array.isArray(s.memory) ? s.memory : DEFAULT.memory,
       speed: s.speed && s.speed in SPEEDS ? s.speed : DEFAULT.speed,
       mode: s.mode === 'arm' ? 'arm' : 'zybooks',
+      format: VALUE_FORMATS.includes(s.format as ValueFormat) ? (s.format as ValueFormat) : DEFAULT.format,
       breakpoints: Array.isArray(s.breakpoints) ? s.breakpoints.filter(Number.isInteger) : [],
     };
   } catch {
@@ -176,6 +181,14 @@ export class App {
       this.saved.mode = this.els.mode.value as Mode;
       this.save();
     });
+    for (const radio of root.querySelectorAll<HTMLInputElement>('input[name="format"]')) {
+      radio.checked = radio.value === this.saved.format;
+      radio.addEventListener('change', () => {
+        this.saved.format = radio.value as ValueFormat;
+        this.save();
+        this.render();
+      });
+    }
     this.els.clearBps.addEventListener('click', () => this.editor.clearBreakpoints());
     this.els.clearBps.disabled = this.saved.breakpoints.length === 0;
     document.addEventListener('keydown', (e) => this.onKey(e));
@@ -448,6 +461,7 @@ export class App {
     speed.disabled = false;
     for (const b of this.els.ioButtons) b.disabled = sim;
 
+    document.body.dataset.format = this.saved.format;
     const state = !sim ? 'editing' : this.running ? 'running' : this.stopped ? this.stopReason : 'paused';
     document.body.dataset.state = state;
     status.textContent = { editing: 'Editing', running: 'Running', paused: 'Paused', finished: 'Finished', error: 'Error' }[state];
@@ -462,10 +476,18 @@ export class App {
     }
 
     const st = m.state;
-    this.registers.showSimulation(st.registerView().map((r) => ({ key: r.name, value: r.value, changed: r.changed })));
-    this.memory.showSimulation(st.memoryView().map((r) => ({ key: r.address, value: r.value, changed: r.changed })));
+    const format = this.saved.format;
+    this.registers.showSimulation(
+      st.registerView().map((r) => ({ key: r.name, value: r.value, changed: r.changed })),
+      format,
+    );
+    this.memory.showSimulation(
+      st.memoryView().map((r) => ({ key: r.address, value: r.value, changed: r.changed })),
+      format,
+    );
     this.els.flags.replaceChildren(...flagChips(st.flags));
-    this.els.pc.textContent = m.done ? 'end' : String(st.pc * 4);
+    const pcBytes = st.pc * 4;
+    this.els.pc.textContent = m.done ? 'end' : format === 'hex' ? `0x${pcBytes.toString(16).toUpperCase()}` : String(pcBytes);
     this.els.steps.textContent = String(st.steps);
     this.editor.setCurrentLine(m.done || this.stopped ? null : (m.program.instructions[st.pc]?.line ?? null));
   }
@@ -549,6 +571,13 @@ const TEMPLATE = `
     <output id="console" class="console" aria-live="polite"></output>
   </section>
   <aside class="side-pane">
+    <fieldset class="format" title="Changes how values are shown while simulating. Enter starting values in decimal.">
+      <legend>Show values as</legend>
+      <label><input type="radio" name="format" value="signed"><span>Decimal</span></label>
+      <label><input type="radio" name="format" value="unsigned"><span>Unsigned</span></label>
+      <label><input type="radio" name="format" value="hex"><span>Hex</span></label>
+      <label><input type="radio" name="format" value="binary"><span>Binary</span></label>
+    </fieldset>
     <section class="panel" aria-labelledby="regs-title">
       <h2 id="regs-title">Registers</h2>
       <div id="registers" class="storage"></div>
