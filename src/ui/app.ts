@@ -520,7 +520,9 @@ function flagChips(flags: { N: boolean; Z: boolean; C: boolean; V: boolean } | n
 
 const TEMPLATE = `
 <header class="topbar">
-  <h1>LEGv8 Simulator</h1>
+  <h1>LEGv8 Simulator
+    <a class="version" href="https://github.com/kevinvw2000-github/legv8-simulator/releases"
+       target="_blank" rel="noopener" title="Release notes">v${__APP_VERSION__}</a></h1>
   <label class="mode">Semantics
     <select id="mode" title="zyBooks reproduces the zyBooks simulator exactly, including its quirks">
       <option value="zybooks">zyBooks-compatible</option>

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 /** Replace the editor contents. */
 async function setCode(page: Page, code: string) {
@@ -122,4 +123,9 @@ test('remembers code across reloads', async ({ page }) => {
   await setCode(page, 'ADD X1, X1, X1');
   await page.reload();
   await expect(page.locator('.cm-content')).toHaveText('ADD X1, X1, X1');
+});
+
+test('shows the version from package.json', async ({ page }) => {
+  const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+  await expect(page.locator('.topbar .version')).toHaveText(`v${version}`);
 });
