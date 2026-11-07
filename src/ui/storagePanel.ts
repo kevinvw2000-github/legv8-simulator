@@ -221,7 +221,7 @@ export class StoragePanel {
  * Binary text (two lines of 8 nibbles) as one block per 32-bit line, each split into two
  * 16-bit halves. CSS shows 2 lines normally and stacks the halves (4 lines) on narrow screens.
  */
-function binaryLines(text: string): HTMLElement[] {
+export function binaryLines(text: string): HTMLElement[] {
   return text.split('\n').map((line) => {
     const nibbles = line.split(' ');
     const el = document.createElement('span');

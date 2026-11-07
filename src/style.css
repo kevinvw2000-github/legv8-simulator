@@ -310,3 +310,23 @@ button[data-armed] { background: var(--error-soft); border-color: var(--error); 
 .editor .cm-line.cm-flash { animation: cm-flash 1.2s ease-out; }
 @keyframes cm-flash { from { background: var(--accent-soft); } to { background: transparent; } }
 .calls .stack-problem { margin: 4px 0; font-size: 13px; color: var(--error); }
+
+/* ---------- watch panel ---------- */
+
+.watch-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+.watch-form input {
+  min-width: 0; font: 13px var(--mono); padding: 4px 6px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);
+}
+.watch-count { display: flex; align-items: center; gap: 2px; color: var(--muted); font-size: 12px; }
+.watch-count input { width: 52px; }
+.watch-error { margin: 6px 0 0; font-size: 12px; color: var(--error); }
+.watch-list { margin-top: 8px; display: grid; gap: 8px; }
+.watch-head { display: flex; align-items: center; gap: 8px; border-bottom: 1px dashed var(--border); }
+.watch-label { font: 650 13px var(--mono); }
+.watch-range { flex: 1; color: var(--muted); font-size: 12px; }
+.watch-index { margin-left: 6px; color: var(--muted); font-size: 11px; font-weight: 400; }
+.watch-table td.unset { color: var(--muted); }
+.watch-table td.value { cursor: help; }
+body[data-format='binary'] .watch-table td.value { font-size: 11px; line-height: 1.35; }
+body[data-format='binary'] .watch-table tbody th { vertical-align: top; }

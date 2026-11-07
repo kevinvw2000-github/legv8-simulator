@@ -49,6 +49,12 @@ address ends it. If `BR X30` goes anywhere else, the panel warns that `X30` was 
 `BL` without being saved. It also explains an invalid SP (for example `X28` never set) and flags popping past
 the top of the stack.
 
+**Watch** pins memory you want to follow, such as an output array, so it's shown from the first step instead of
+appearing only once the program touches it. Enter an address (decimal, or hex like `0xFA0`; a multiple of 8), an
+optional name and a number of doublewords (up to 64). Watches can be added at any time, are saved with your code
+(but not in Import/Export, which uses zyBooks' format), and never add entries to the Memory panel. A `—` means
+the doubleword hasn't been accessed yet (it reads as 0).
+
 **Keyboard:** <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step · <kbd>Ctrl</kbd>+<kbd>Z</kbd> Step back (while simulating) ·
 <kbd>F9</kbd> toggle breakpoint · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Enter/Exit simulation.
 

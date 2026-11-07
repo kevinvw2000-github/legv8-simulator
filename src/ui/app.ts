@@ -9,6 +9,8 @@ import { callStackView, stackView } from '../core/calls';
 import { CallsPanel } from './callsPanel';
 import { createEditor, type CodeEditor } from './editor';
 import { StoragePanel, type Entry } from './storagePanel';
+import { parseWatch, type WatchSpec } from '../core/watch';
+import { WatchPanel } from './watchPanel';
 
 export const SPEEDS = { Slow: 3000, Medium: 2000, Fast: 1000, Instant: 0 } as const;
 export type Speed = keyof typeof SPEEDS;
@@ -23,6 +25,8 @@ interface Saved {
   format: ValueFormat;
   /** 1-based source lines with a breakpoint. */
   breakpoints: number[];
+  /** Pinned memory ranges (not part of zyBooks' import/export format). */
+  watches: WatchSpec[];
 }
 
 const STORAGE_KEY = 'legv8-sim:v1';
@@ -57,7 +61,19 @@ const DEFAULT: Saved = {
   mode: 'zybooks',
   format: 'signed',
   breakpoints: [],
+  watches: [{ label: 'array', address: '4000', count: 3 }],
 };
+
+/** Keep only well-formed saved watches. */
+function loadWatches(v: unknown): WatchSpec[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((w) => {
+    if (typeof w !== 'object' || w === null) return [];
+    const p = parseWatch(String(w.address ?? ''), String(w.count ?? ''));
+    if ('error' in p) return [];
+    return [{ label: typeof w.label === 'string' ? w.label.slice(0, 24) : '', address: p.address.toString(), count: p.count }];
+  });
+}
 
 function load(): Saved {
   try {
@@ -72,6 +88,7 @@ function load(): Saved {
       mode: s.mode === 'arm' ? 'arm' : 'zybooks',
       format: VALUE_FORMATS.includes(s.format as ValueFormat) ? (s.format as ValueFormat) : DEFAULT.format,
       breakpoints: Array.isArray(s.breakpoints) ? s.breakpoints.filter(Number.isInteger) : [],
+      watches: loadWatches(s.watches),
     };
   } catch {
     return structuredClone(DEFAULT);
@@ -85,6 +102,7 @@ export class App {
   private readonly registers: StoragePanel;
   private readonly memory: StoragePanel;
   private readonly calls: CallsPanel;
+  private readonly watch: WatchPanel;
   private saved: Saved;
 
   private machine: Machine | null = null;
@@ -163,6 +181,10 @@ export class App {
       this.save();
     });
     this.calls = new CallsPanel($(root, '#calls'), (line) => this.editor.revealLine(line));
+    this.watch = new WatchPanel($(root, '#watch'), this.saved.watches, (w) => {
+      this.saved.watches = w;
+      this.save();
+    });
     this.registers.setEntries(this.saved.registers);
     this.memory.setEntries(this.saved.memory);
 
@@ -280,7 +302,7 @@ export class App {
     else if (e.key === 'F10') {
       if (sim) this.stepOnce();
       else this.enterSimulation();
-    } else if (sim && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    } else if (sim && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && !isTextField(e.target)) {
       this.stepBack();
     } else if (e.key === 'F9') this.editor.toggleBreakpointAtCursor();
     else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -498,6 +520,7 @@ export class App {
       this.els.pc.textContent = '—';
       this.els.steps.textContent = '0';
       this.calls.render(null, this.saved.format);
+      this.watch.render(null, this.saved.format);
       return;
     }
 
@@ -519,6 +542,7 @@ export class App {
       { frames: callStackView(st, m.program), warning: st.callWarning, stack: stackView(st, m.program) },
       format,
     );
+    this.watch.render(st, format);
     this.editor.setCurrentLine(m.done || this.stopped ? null : (m.program.instructions[st.pc]?.line ?? null));
   }
 
@@ -547,6 +571,11 @@ export function signedHint(message: string): string {
   if (v < 1n << 63n) return '';
   return `
 (That address is ${s64(v)} as a signed value.)`;
+}
+
+/** Typing in a form field keeps its own Ctrl+Z. */
+function isTextField(t: EventTarget | null): boolean {
+  return t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
 }
 
 /** A destructive button: the first click asks for confirmation, the second (within 4 s) acts. */
@@ -629,6 +658,10 @@ const TEMPLATE = `
     <section class="panel" aria-labelledby="mem-title">
       <h2 id="mem-title">Memory</h2>
       <div id="memory" class="storage"></div>
+    </section>
+    <section class="panel watch" aria-labelledby="watch-title">
+      <h2 id="watch-title">Watch</h2>
+      <div id="watch"></div>
     </section>
     <section class="panel cpu" aria-label="CPU state">
       <div class="cpu-row"><span class="cpu-label">Flags</span><span id="flags" class="flags"></span></div>
