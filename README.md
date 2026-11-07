@@ -40,6 +40,15 @@ Values that just changed are highlighted, and the flags (N Z C V), PC (byte addr
 decimal, hex and binary; hex also applies to the PC. Hover over any value to see all four. Starting values are
 still entered in decimal, and Import/Export always uses decimal.
 
+**Call stack** lists the procedures currently running (innermost first), where each was called from and where it
+will return. Click one to find its `BL` in the editor. Below it, **Stack** shows the doublewords from SP (`X28`)
+up to the top of the stack (the first value `X28` had, usually your starting value), grouped by the call that owns them and labeled with the register each `STUR`
+saved there (a saved `X30` also shows the line it returns to). Reading this view never adds entries to the memory
+panel. LEGv8 has no hardware call stack, so calls are inferred: `BL` starts a call and a `BR` to its return
+address ends it. If `BR X30` goes anywhere else, the panel warns that `X30` was probably overwritten by a nested
+`BL` without being saved. It also explains an invalid SP (for example `X28` never set) and flags popping past
+the top of the stack.
+
 **Keyboard:** <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step · <kbd>Ctrl</kbd>+<kbd>Z</kbd> Step back (while simulating) ·
 <kbd>F9</kbd> toggle breakpoint · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Enter/Exit simulation.
 

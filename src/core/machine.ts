@@ -1,5 +1,6 @@
 // Core simulator API. Pure and DOM-free.
 import { parseValue } from './bits';
+import { noteStackPointer, pendingStore, traceStep } from './calls';
 import { execute } from './execute';
 import { instructionToString } from './isa';
 import { ParseError, parseProgram, type Program } from './parser';
@@ -60,6 +61,7 @@ export class Machine {
       this.state.writeMem(parseValue(addr), 8, parseValue(value));
     }
     this.state.clearChanges();
+    noteStackPointer(this.state);
   }
 
   get done(): boolean {
@@ -76,8 +78,11 @@ export class Machine {
     if (recording) this.state.beginRecord();
     this.state.clearChanges();
     try {
+      const store = pendingStore(this.state, ins);
       this.state.pc = execute(ins, pc, this.state, this.program);
       this.state.steps++;
+      traceStep(this.state, this.program, ins, pc, store);
+      noteStackPointer(this.state);
     } catch (e) {
       if (e instanceof ExecError) {
         throw new RuntimeError(`Error: ${instructionToString(ins)}. ${e.message}`, pc);

@@ -171,6 +171,8 @@ export interface CodeEditor {
   /** Toggle the breakpoint on the line holding the cursor. */
   toggleBreakpointAtCursor(): void;
   clearBreakpoints(): void;
+  /** Scroll a line (1-based) to the middle of the editor and flash it briefly. */
+  revealLine(line: number): void;
 }
 
 export function createEditor(
@@ -232,6 +234,21 @@ export function createEditor(
     setErrorLine: (line) => {
       view.dispatch({ effects: setMarks.of({ error: line }) });
       if (line !== null) scrollToLine(line);
+    },
+    revealLine: (line) => {
+      if (line < 1 || line > view.state.doc.lines) return;
+      const from = view.state.doc.line(line).from;
+      view.dispatch({ effects: EditorView.scrollIntoView(from, { y: 'center' }) });
+      // A short-lived class on the line's DOM node; CodeMirror may redraw it away, which is fine.
+      requestAnimationFrame(() => {
+        const { node } = view.domAtPos(from);
+        const el = (node instanceof HTMLElement ? node : node.parentElement)?.closest('.cm-line');
+        if (!el) return;
+        el.classList.remove('cm-flash');
+        void (el as HTMLElement).offsetWidth; // restart the animation
+        el.classList.add('cm-flash');
+        window.setTimeout(() => el.classList.remove('cm-flash'), 1200);
+      });
     },
     getBreakpoints: () => breakpointLines(view.state),
     setBreakpoints: (lines) => {

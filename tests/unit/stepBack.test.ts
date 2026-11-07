@@ -12,6 +12,10 @@ function snapshot(st: MachineState) {
     flags: { ...st.flags },
     pc: st.pc,
     steps: st.steps,
+    callStack: [...st.callStack],
+    callWarning: st.callWarning,
+    stackTop: st.stackTop,
+    origins: [...st.storeOrigins].sort(([a], [b]) => (a < b ? -1 : 1)),
   };
 }
 
@@ -108,6 +112,16 @@ describe('Step back', () => {
       'Done:',
     ].join('\n');
     expect(roundTrip(machine(src))).toBeGreaterThan(20);
+  });
+
+  it('round-trips recursion that saves registers on the stack', () => {
+    const src = [
+      'ADDI X0, XZR, #3', 'BL pow2', 'B done', 'pow2:', 'SUBI X28, X28, #16', 'STUR X30, [X28, #8]',
+      'STUR X0, [X28, #0]', 'CBZ X0, base', 'SUBI X0, X0, #1', 'BL pow2', 'LSL X1, X1, #1', 'B ret',
+      'base:', 'ADDI X1, XZR, #1', 'ret:', 'LDUR X0, [X28, #0]', 'LDUR X30, [X28, #8]',
+      'ADDI X28, X28, #16', 'BR X30', 'done:',
+    ].join('\n');
+    expect(roundTrip(machine(src, { registers: { X28: '8000' }, memory: {} }))).toBeGreaterThan(40);
   });
 
   it('works the same in ARM-accurate mode', () => {

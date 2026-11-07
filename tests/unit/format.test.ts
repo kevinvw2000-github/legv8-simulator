@@ -43,3 +43,17 @@ describe('formatValue', () => {
     );
   });
 });
+
+describe('signedHint', async () => {
+  const { signedHint } = await import('../../src/ui/app');
+  it('adds the signed value only for addresses that are negative when signed', () => {
+    expect(signedHint('Error: LDUR X1, [X2, #0]. Invalid address: 18446744073709551608')).toBe(
+      '\n(That address is -8 as a signed value.)',
+    );
+    expect(signedHint('Error: LDUR X1, [X2, #0]. Invalid address: 4611686018427387904')).toBe('');
+    expect(signedHint('Error: BR X1. Instruction addresses should be word-aligned. Tried to access: 18446744073709551615')).toBe(
+      '\n(That address is -1 as a signed value.)',
+    );
+    expect(signedHint('Error: SDIV X1, X2, XZR. division by zero')).toBe('');
+  });
+});

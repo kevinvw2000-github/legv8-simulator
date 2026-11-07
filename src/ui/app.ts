@@ -2,9 +2,11 @@
 
 import { Machine, RuntimeError } from '../core/machine';
 import { ParseError, parseProgram } from '../core/parser';
-import { VALUE_FORMATS, type ValueFormat } from '../core/bits';
+import { s64, VALUE_FORMATS, type ValueFormat } from '../core/bits';
 import type { Mode } from '../core/state';
 import { exportWorkspace, importWorkspace } from '../core/stateIO';
+import { callStackView, stackView } from '../core/calls';
+import { CallsPanel } from './callsPanel';
 import { createEditor, type CodeEditor } from './editor';
 import { StoragePanel, type Entry } from './storagePanel';
 
@@ -82,6 +84,7 @@ export class App {
   private readonly editor: CodeEditor;
   private readonly registers: StoragePanel;
   private readonly memory: StoragePanel;
+  private readonly calls: CallsPanel;
   private saved: Saved;
 
   private machine: Machine | null = null;
@@ -159,6 +162,7 @@ export class App {
       this.saved.memory = e;
       this.save();
     });
+    this.calls = new CallsPanel($(root, '#calls'), (line) => this.editor.revealLine(line));
     this.registers.setEntries(this.saved.registers);
     this.memory.setEntries(this.saved.memory);
 
@@ -370,7 +374,7 @@ export class App {
       if (!(e instanceof RuntimeError)) throw e;
       this.stopped = true;
       this.stopReason = 'error';
-      this.log(e.message, 'error');
+      this.log(e.message + signedHint(e.message), 'error');
       this.editor.setErrorLine(m.program.instructions[e.pc]?.line ?? null);
       return false;
     }
@@ -493,6 +497,7 @@ export class App {
       this.els.flags.replaceChildren(...flagChips(null));
       this.els.pc.textContent = '—';
       this.els.steps.textContent = '0';
+      this.calls.render(null, this.saved.format);
       return;
     }
 
@@ -510,6 +515,10 @@ export class App {
     const pcBytes = st.pc * 4;
     this.els.pc.textContent = m.done ? 'end' : format === 'hex' ? `0x${pcBytes.toString(16).toUpperCase()}` : String(pcBytes);
     this.els.steps.textContent = String(st.steps);
+    this.calls.render(
+      { frames: callStackView(st, m.program), warning: st.callWarning, stack: stackView(st, m.program) },
+      format,
+    );
     this.editor.setCurrentLine(m.done || this.stopped ? null : (m.program.instructions[st.pc]?.line ?? null));
   }
 
@@ -525,6 +534,19 @@ export class App {
       // Storage unavailable (private mode etc.): keep working without persistence.
     }
   }
+}
+
+/**
+ * Runtime errors show addresses as unsigned 64-bit numbers, exactly like zyBooks. When that
+ * number is really a negative value (e.g. SP went below 0), add a second line saying so.
+ */
+export function signedHint(message: string): string {
+  const m = /(?:Invalid address|Tried to access): (\d+)/.exec(message);
+  if (!m) return '';
+  const v = BigInt(m[1]!);
+  if (v < 1n << 63n) return '';
+  return `
+(That address is ${s64(v)} as a signed value.)`;
 }
 
 /** A destructive button: the first click asks for confirmation, the second (within 4 s) acts. */
@@ -612,6 +634,10 @@ const TEMPLATE = `
       <div class="cpu-row"><span class="cpu-label">Flags</span><span id="flags" class="flags"></span></div>
       <div class="cpu-row"><span class="cpu-label">PC</span><span id="pc" class="mono">—</span></div>
       <div class="cpu-row"><span class="cpu-label">Steps</span><span id="steps" class="mono">0</span></div>
+    </section>
+    <section class="panel calls" aria-labelledby="calls-title">
+      <h2 id="calls-title">Call stack</h2>
+      <div id="calls"></div>
     </section>
     <details class="panel io">
       <summary>Import / Export</summary>

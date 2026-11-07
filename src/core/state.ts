@@ -21,6 +21,31 @@ export interface Flags {
 /** Thrown during execution; becomes "Error: <instruction>. <message>". */
 export class ExecError extends Error {}
 
+/** One active procedure call, pushed by BL and popped by a BR to its return address. */
+export interface Frame {
+  /** Label BL jumped to. */
+  label: string;
+  /** Index of the BL instruction. */
+  callPc: number;
+  /** Byte address BL put in X30. */
+  returnAddress: bigint;
+  /** X28 (stack pointer) when BL ran. Stack below this belongs to the call. */
+  spAtCall: bigint;
+}
+
+/** Which register a STUR saved at an address, and the instruction that did it. */
+export interface StoreOrigin {
+  reg: string;
+  pc: number;
+}
+
+/** Call-tracking fields, saved whole in each step record (they are small and replaced, not mutated). */
+export interface CallTrace {
+  callStack: readonly Frame[];
+  callWarning: string | null;
+  stackTop: bigint | null;
+}
+
 /**
  * What one step changed, so it can be undone. Only the first old value of each register or
  * byte is kept. A byte whose old value is `undefined` didn't exist before the step.
@@ -35,6 +60,8 @@ export interface StepRecord {
   /** Change highlighting from before the step (it shows what the previous step changed). */
   changedRegs: number[];
   changedRows: bigint[];
+  trace: CallTrace;
+  origins: Map<bigint, StoreOrigin | undefined>;
 }
 
 export class MachineState {
@@ -54,6 +81,15 @@ export class MachineState {
   pc = 0;
   steps = 0;
 
+  // ---- call tracking (inferred from BL/BR; see Machine) ----
+  callStack: readonly Frame[] = [];
+  /** Set when a BR X30 doesn't go where the innermost call should return. */
+  callWarning: string | null = null;
+  /** First valid, non-zero X28: the top of the stack area. */
+  stackTop: bigint | null = null;
+  /** Doubleword address → what STUR stored there. */
+  readonly storeOrigins = new Map<bigint, StoreOrigin>();
+
   /** While a step runs, the record its changes are logged into. */
   private record: StepRecord | null = null;
 
@@ -72,7 +108,28 @@ export class MachineState {
       bytes: new Map(),
       changedRegs: [...this.changedRegs],
       changedRows: [...this.changedRows],
+      trace: { callStack: this.callStack, callWarning: this.callWarning, stackTop: this.stackTop },
+      origins: new Map(),
     };
+  }
+
+  /** Set or clear the store origin of a doubleword address, logging it for undo. */
+  setOrigin(addr: bigint, origin: StoreOrigin | undefined): void {
+    if (this.record && !this.record.origins.has(addr)) this.record.origins.set(addr, this.storeOrigins.get(addr));
+    if (origin) this.storeOrigins.set(addr, origin);
+    else this.storeOrigins.delete(addr);
+  }
+
+  /** Read a doubleword without marking it accessed (for inspection panels). */
+  peekDoubleword(addr: bigint): { value: bigint; present: boolean } {
+    let value = 0n;
+    let present = false;
+    for (let i = 0; i < 8; i++) {
+      const b = this.memory.get(u64(addr + BigInt(i)));
+      if (b !== undefined) present = true;
+      value |= BigInt(b ?? 0) << BigInt(8 * i);
+    }
+    return { value, present };
   }
 
   /** Stop logging and return what the step changed. */
@@ -98,6 +155,11 @@ export class MachineState {
     for (const i of r.changedRegs) this.changedRegs.add(i);
     this.changedRows.clear();
     for (const row of r.changedRows) this.changedRows.add(row);
+    ({ callStack: this.callStack, callWarning: this.callWarning, stackTop: this.stackTop } = r.trace);
+    for (const [a, o] of r.origins) {
+      if (o) this.storeOrigins.set(a, o);
+      else this.storeOrigins.delete(a);
+    }
   }
 
   private access(i: number): void {

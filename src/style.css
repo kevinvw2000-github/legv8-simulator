@@ -275,3 +275,38 @@ button[data-armed] { background: var(--error-soft); border-color: var(--error); 
   background: var(--surface-2); color: var(--muted);
 }
 .flag[data-on='true'] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+
+/* ---------- call stack panel ---------- */
+
+.calls .call-warning {
+  margin: 0 0 8px; padding: 6px 8px; font-size: 12px; border-radius: 6px;
+  color: var(--error); background: var(--error-soft); border: 1px solid var(--error);
+}
+.calls .frames { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.calls .frame {
+  display: grid; grid-template-columns: auto 1fr; column-gap: 8px; width: 100%; text-align: left;
+  padding: 4px 6px; border-color: transparent; background: transparent;
+}
+.calls .frames li:first-child .frame { background: var(--accent-soft); }
+.calls .frame-label { font-family: var(--mono); font-weight: 650; }
+.calls .frame-depth { color: var(--muted); font-size: 12px; justify-self: end; }
+.calls .frame-meta { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.calls .frame-top { padding: 4px 6px; color: var(--muted); font-size: 12px; font-style: italic; }
+.calls .stack { margin-top: 10px; }
+.calls .stack h3 {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 4px;
+  font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+}
+.calls .stack-meta { font: 400 12px var(--mono); text-transform: none; letter-spacing: 0; }
+.stack-table .stack-owner th {
+  padding-top: 6px; font: 600 11px system-ui, sans-serif; color: var(--muted); border-bottom: 1px dashed var(--border);
+}
+.stack-table .stack-offset { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+.stack-table tr.stack-sp th { box-shadow: inset 3px 0 var(--accent); padding-left: 7px; }
+.stack-table td.unset { color: var(--muted); }
+.stack-table .stack-note { font: 12px system-ui, sans-serif; color: var(--muted); padding-left: 10px; }
+.stack-table td.value { cursor: help; }
+
+.editor .cm-line.cm-flash { animation: cm-flash 1.2s ease-out; }
+@keyframes cm-flash { from { background: var(--accent-soft); } to { background: transparent; } }
+.calls .stack-problem { margin: 4px 0; font-size: 13px; color: var(--error); }
