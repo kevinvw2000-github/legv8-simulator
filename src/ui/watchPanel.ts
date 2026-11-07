@@ -45,6 +45,12 @@ export class WatchPanel {
     this.render(null, 'signed');
   }
 
+  /** Replace all watches (e.g. when a share link is opened). */
+  setWatches(watches: WatchSpec[]): void {
+    this.watches = watches.map((w) => ({ ...w }));
+    this.render(this.last.state, this.last.format);
+  }
+
   private add(form: HTMLFormElement): void {
     const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
     const parsed = parseWatch(field('address').value, field('count').value);

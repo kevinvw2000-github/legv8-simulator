@@ -9,7 +9,8 @@ import { callStackView, stackView } from '../core/calls';
 import { CallsPanel } from './callsPanel';
 import { createEditor, type CodeEditor } from './editor';
 import { StoragePanel, type Entry } from './storagePanel';
-import { parseWatch, type WatchSpec } from '../core/watch';
+import type { WatchSpec } from '../core/watch';
+import { decodeShare, encodeShare, isShareHash, LONG_LINK, sanitizeWatches, type SharedWorkspace } from '../core/share';
 import { WatchPanel } from './watchPanel';
 
 export const SPEEDS = { Slow: 3000, Medium: 2000, Fast: 1000, Instant: 0 } as const;
@@ -64,17 +65,6 @@ const DEFAULT: Saved = {
   watches: [{ label: 'array', address: '4000', count: 3 }],
 };
 
-/** Keep only well-formed saved watches. */
-function loadWatches(v: unknown): WatchSpec[] {
-  if (!Array.isArray(v)) return [];
-  return v.flatMap((w) => {
-    if (typeof w !== 'object' || w === null) return [];
-    const p = parseWatch(String(w.address ?? ''), String(w.count ?? ''));
-    if ('error' in p) return [];
-    return [{ label: typeof w.label === 'string' ? w.label.slice(0, 24) : '', address: p.address.toString(), count: p.count }];
-  });
-}
-
 function load(): Saved {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -88,7 +78,7 @@ function load(): Saved {
       mode: s.mode === 'arm' ? 'arm' : 'zybooks',
       format: VALUE_FORMATS.includes(s.format as ValueFormat) ? (s.format as ValueFormat) : DEFAULT.format,
       breakpoints: Array.isArray(s.breakpoints) ? s.breakpoints.filter(Number.isInteger) : [],
-      watches: loadWatches(s.watches),
+      watches: sanitizeWatches(s.watches),
     };
   } catch {
     return structuredClone(DEFAULT);
@@ -104,6 +94,8 @@ export class App {
   private readonly calls: CallsPanel;
   private readonly watch: WatchPanel;
   private saved: Saved;
+  /** While a share link is open: the user's own work, kept until they choose. */
+  private ownWork: Saved | null = null;
 
   private machine: Machine | null = null;
   private running = false;
@@ -226,8 +218,74 @@ export class App {
     $<HTMLButtonElement>(root, '#copy').addEventListener('click', () => void this.copyExport());
     confirmTwice($(root, '#import'), 'Replace code and values?', () => this.importFromText());
     confirmTwice($(root, '#reset'), 'Replace with the demo?', () => this.resetToDefault());
+    $<HTMLButtonElement>(root, '#share').addEventListener('click', () => void this.copyShareLink());
+    $<HTMLButtonElement>(root, '#keep-shared').addEventListener('click', () => this.keepShared());
+    $<HTMLButtonElement>(root, '#back-mine').addEventListener('click', () => this.backToMine());
+    window.addEventListener('hashchange', () => void this.openShareFromHash());
+    // The desktop layout fills the window, so it shrinks by the banner's height while it shows.
+    const banner = $(root, '.shared-banner');
+    new ResizeObserver(() => document.body.style.setProperty('--banner-h', `${banner.offsetHeight}px`)).observe(banner);
 
     this.render();
+    void this.openShareFromHash();
+  }
+
+  // ---------- share links ----------
+
+  private async copyShareLink(): Promise<void> {
+    const { code, registers, memory, watches, breakpoints, mode } = this.saved;
+    const url = location.origin + location.pathname + (await encodeShare({ code, registers, memory, watches, breakpoints, mode }));
+    const size = `${url.length.toLocaleString('en-US')} characters`;
+    const long = url.length > LONG_LINK ? ' It is long, so some apps may cut it off; Export is safer for big programs.' : '';
+    try {
+      await navigator.clipboard.writeText(url);
+      this.log(`Share link copied (${size}). Anyone with the link can see this code.${long}`, long ? '' : 'ok');
+    } catch {
+      this.els.ioText.value = url;
+      ($(document, '.io') as HTMLDetailsElement).open = true;
+      this.els.ioText.select();
+      this.log(`Clipboard unavailable. The link (${size}) is selected under Import / Export; press Ctrl+C to copy.${long}`);
+    }
+  }
+
+  /** Open a share link from the address bar, keeping the user's own work aside. */
+  private async openShareFromHash(): Promise<void> {
+    if (!isShareHash(location.hash)) return;
+    let ws: SharedWorkspace;
+    try {
+      ws = await decodeShare(location.hash);
+    } catch (e) {
+      clearHash();
+      this.log((e as Error).message, 'error');
+      return;
+    }
+    if (this.machine) this.exitSimulation();
+    this.ownWork ??= structuredClone(this.saved);
+    this.applyWorkspace(ws);
+    document.body.dataset.shared = 'true';
+    this.log("Opened a shared program. Your own program is kept until you choose Keep it.", 'ok');
+  }
+
+  private keepShared(): void {
+    this.ownWork = null;
+    this.leaveShared();
+    this.save();
+    this.log('Kept. The shared program is now your saved program.', 'ok');
+  }
+
+  private backToMine(): void {
+    const own = this.ownWork;
+    if (!own) return;
+    this.ownWork = null;
+    if (this.machine) this.exitSimulation();
+    this.applyWorkspace(own);
+    this.leaveShared();
+    this.log('Back to your program.', 'ok');
+  }
+
+  private leaveShared(): void {
+    clearHash();
+    delete document.body.dataset.shared;
   }
 
   // ---------- import / export / reset ----------
@@ -267,10 +325,19 @@ export class App {
     this.log('Reset to the demo program.', 'ok');
   }
 
-  private applyWorkspace(ws: { code?: string; registers?: Entry[]; memory?: Entry[] }): void {
+  private applyWorkspace(ws: Partial<Pick<Saved, 'code' | 'registers' | 'memory' | 'watches' | 'breakpoints' | 'mode'>>): void {
     if (ws.code !== undefined) {
       this.editor.setCode(ws.code);
       this.editor.clearBreakpoints();
+    }
+    if (ws.breakpoints) this.editor.setBreakpoints(ws.breakpoints);
+    if (ws.watches) {
+      this.saved.watches = ws.watches;
+      this.watch.setWatches(ws.watches);
+    }
+    if (ws.mode) {
+      this.saved.mode = ws.mode;
+      this.els.mode.value = ws.mode;
     }
     if (ws.registers) {
       this.saved.registers = ws.registers;
@@ -552,8 +619,10 @@ export class App {
   }
 
   private save(): void {
+    // While a shared program is open, only display preferences are saved over the user's own work.
+    const data = this.ownWork ? { ...this.ownWork, speed: this.saved.speed, format: this.saved.format } : this.saved;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.saved));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch {
       // Storage unavailable (private mode etc.): keep working without persistence.
     }
@@ -571,6 +640,11 @@ export function signedHint(message: string): string {
   if (v < 1n << 63n) return '';
   return `
 (That address is ${s64(v)} as a signed value.)`;
+}
+
+/** Remove a share link from the address bar without reloading. */
+function clearHash(): void {
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
 }
 
 /** Typing in a form field keeps its own Ctrl+Z. */
@@ -617,6 +691,7 @@ const TEMPLATE = `
   <h1>LEGv8 Simulator
     <a class="version" href="https://github.com/kevinvw2000-github/legv8-simulator/releases"
        target="_blank" rel="noopener" title="Release notes">v${__APP_VERSION__}</a></h1>
+  <button id="share" type="button" class="share" title="Copy a link that opens this program, its starting values, watches and breakpoints">Share link</button>
   <label class="mode">Semantics
     <select id="mode" title="zyBooks reproduces the zyBooks simulator exactly, including its quirks">
       <option value="zybooks">zyBooks-compatible</option>
@@ -624,6 +699,11 @@ const TEMPLATE = `
     </select>
   </label>
 </header>
+<div class="shared-banner" role="region" aria-label="Shared program">
+  <p>You're viewing a shared program. Your own program is safe; <strong>Keep it</strong> replaces it with this one.</p>
+  <button id="keep-shared" type="button" class="primary">Keep it</button>
+  <button id="back-mine" type="button">Back to my program</button>
+</div>
 <main class="layout">
   <section class="code-pane" aria-label="Assembly">
     <div class="toolbar" role="toolbar" aria-label="Simulation controls">

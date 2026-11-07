@@ -55,6 +55,13 @@ optional name and a number of doublewords (up to 64). Watches can be added at an
 (but not in Import/Export, which uses zyBooks' format), and never add entries to the Memory panel. A `—` means
 the doubleword hasn't been accessed yet (it reads as 0).
 
+**Share link** (top bar) copies a link that opens your code, starting registers and memory, watches, breakpoints
+and semantics mode for whoever clicks it. Nothing is uploaded: everything is compressed into the part of the URL
+after `#`, which browsers never send to a server. Opening a link shows a banner and leaves your own program alone
+until you choose **Keep it** (replace yours with the shared one) or **Back to my program**. A link that was cut off
+when pasted is reported as damaged instead of half-loading. Anyone with a link can read the code in it, so check
+your course's rules before sharing graded work.
+
 **Keyboard:** <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step · <kbd>Ctrl</kbd>+<kbd>Z</kbd> Step back (while simulating) ·
 <kbd>F9</kbd> toggle breakpoint · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Enter/Exit simulation.
 
