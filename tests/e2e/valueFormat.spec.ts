@@ -49,8 +49,8 @@ test('switches registers, memory and PC between formats', async ({ page }) => {
 test('PC is shown in hex in hex mode', async ({ page }) => {
   await page.getByRole('button', { name: 'Exit simulation' }).click();
   await page.getByRole('button', { name: 'Enter simulation' }).click();
-  await page.getByRole('button', { name: 'Step' }).click();
-  await page.getByRole('button', { name: 'Step' }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
   await expect(page.locator('#pc')).toHaveText('8');
   await page.getByLabel('Hex', { exact: true }).check();
   await expect(page.locator('#pc')).toHaveText('0x8');

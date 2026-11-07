@@ -32,18 +32,18 @@ test('runs the default program to completion', async ({ page }) => {
   await expect(page.locator('#console')).toHaveText('Program finished after 28 steps.');
   await expect(page.locator('#status')).toHaveText('Finished');
   expect((await registers(page)).X0).toBe('21');
-  await expect(page.getByRole('button', { name: 'Step' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Step', exact: true })).toBeDisabled();
 });
 
 test('steps one instruction at a time and highlights the current line', async ({ page }) => {
   await setCode(page, 'ADDI X1, XZR, #5\nADDI X2, X1, #1');
   await page.getByRole('button', { name: 'Enter simulation' }).click();
   await expect(page.locator('.cm-sim-current')).toHaveText('ADDI X1, XZR, #5');
-  await page.getByRole('button', { name: 'Step' }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
   await expect(page.locator('.cm-sim-current')).toHaveText('ADDI X2, X1, #1');
   expect((await registers(page)).X1).toBe('5');
   await expect(page.locator('#registers tr.changed th')).toHaveText('X1');
-  await page.getByRole('button', { name: 'Step' }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
   await expect(page.locator('#status')).toHaveText('Finished');
 });
 
@@ -58,8 +58,8 @@ test('shows a parse error with the zyBooks message and marks the line', async ({
 test('shows a runtime error and keeps the state visible', async ({ page }) => {
   await setCode(page, 'ADDI X2, XZR, #9\nSDIV X1, X2, XZR');
   await page.getByRole('button', { name: 'Enter simulation' }).click();
-  await page.getByRole('button', { name: 'Step' }).click();
-  await page.getByRole('button', { name: 'Step' }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
   await expect(page.locator('#console')).toHaveText('Error: SDIV X1, X2, XZR. division by zero');
   await expect(page.locator('.cm-sim-error')).toHaveText('SDIV X1, X2, XZR');
   await expect(page.locator('#status')).toHaveText('Error');
@@ -78,14 +78,14 @@ test('pauses an infinite loop (P8) and can step while paused (P9)', async ({ pag
   await expect(page.locator('#console')).toHaveText('');
   const before = Number((await registers(page)).X1);
   expect(before).toBeGreaterThan(100);
-  await page.getByRole('button', { name: 'Step' }).click();
-  await page.getByRole('button', { name: 'Step' }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
   expect(Number((await registers(page)).X1)).toBe(before + 1);
 });
 
 test('exit restores the initial values and editing', async ({ page }) => {
   await page.getByRole('button', { name: 'Enter simulation' }).click();
-  await page.getByRole('button', { name: 'Step' }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
   await page.getByRole('button', { name: 'Exit simulation' }).click();
   await expect(page.locator('#status')).toHaveText('Editing');
   await expect(page.locator('#registers tbody tr')).toHaveCount(2);
@@ -98,7 +98,7 @@ test('initial values entered in the panels are used', async ({ page }) => {
   await page.locator('#registers tbody tr').first().locator('select').selectOption('X2');
   await page.locator('#registers tbody tr').first().locator('td input').fill('4008');
   await page.getByRole('button', { name: 'Enter simulation' }).click();
-  await page.getByRole('button', { name: 'Step' }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
   expect((await registers(page)).X1).toBe('7');
 });
 

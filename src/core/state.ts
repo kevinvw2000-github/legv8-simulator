@@ -21,6 +21,22 @@ export interface Flags {
 /** Thrown during execution; becomes "Error: <instruction>. <message>". */
 export class ExecError extends Error {}
 
+/**
+ * What one step changed, so it can be undone. Only the first old value of each register or
+ * byte is kept. A byte whose old value is `undefined` didn't exist before the step.
+ */
+export interface StepRecord {
+  pc: number;
+  steps: number;
+  flags: Flags;
+  regs: Map<number, bigint>;
+  newlyAccessedRegs: number[];
+  bytes: Map<bigint, number | undefined>;
+  /** Change highlighting from before the step (it shows what the previous step changed). */
+  changedRegs: number[];
+  changedRows: bigint[];
+}
+
 export class MachineState {
   readonly regs: bigint[] = new Array<bigint>(32).fill(0n);
   /** Registers read or written (shown in the panel). */
@@ -38,21 +54,76 @@ export class MachineState {
   pc = 0;
   steps = 0;
 
+  /** While a step runs, the record its changes are logged into. */
+  private record: StepRecord | null = null;
+
   constructor(readonly mode: Mode = 'zybooks') {}
+
+  // ---- undo ----
+
+  /** Start logging changes for one step. Call before clearChanges(). */
+  beginRecord(): void {
+    this.record = {
+      pc: this.pc,
+      steps: this.steps,
+      flags: { ...this.flags },
+      regs: new Map(),
+      newlyAccessedRegs: [],
+      bytes: new Map(),
+      changedRegs: [...this.changedRegs],
+      changedRows: [...this.changedRows],
+    };
+  }
+
+  /** Stop logging and return what the step changed. */
+  endRecord(): StepRecord {
+    const r = this.record;
+    if (!r) throw new Error('No step is being recorded');
+    this.record = null;
+    return r;
+  }
+
+  /** Put the state back exactly as it was before the recorded step. */
+  undo(r: StepRecord): void {
+    for (const [i, v] of r.regs) this.regs[i] = v;
+    for (const i of r.newlyAccessedRegs) this.accessedRegs.delete(i);
+    for (const [a, v] of r.bytes) {
+      if (v === undefined) this.memory.delete(a);
+      else this.memory.set(a, v);
+    }
+    this.flags = { ...r.flags };
+    this.pc = r.pc;
+    this.steps = r.steps;
+    this.changedRegs.clear();
+    for (const i of r.changedRegs) this.changedRegs.add(i);
+    this.changedRows.clear();
+    for (const row of r.changedRows) this.changedRows.add(row);
+  }
+
+  private access(i: number): void {
+    if (this.accessedRegs.has(i)) return;
+    this.accessedRegs.add(i);
+    this.record?.newlyAccessedRegs.push(i);
+  }
+
+  private logByte(a: bigint): void {
+    if (this.record && !this.record.bytes.has(a)) this.record.bytes.set(a, this.memory.get(a));
+  }
 
   // ---- registers ----
 
   readReg(name: string): bigint {
     const i = regIndex(name);
-    this.accessedRegs.add(i);
+    this.access(i);
     return i === XZR ? 0n : (this.regs[i] as bigint);
   }
 
   /** Writes to XZR are silently ignored, as in zyBooks. */
   writeReg(name: string, value: bigint): void {
     const i = regIndex(name);
-    this.accessedRegs.add(i);
+    this.access(i);
     if (i === XZR) return;
+    if (this.record && !this.record.regs.has(i)) this.record.regs.set(i, this.regs[i] as bigint);
     this.regs[i] = u64(value);
     this.changedRegs.add(i);
   }
@@ -70,6 +141,7 @@ export class MachineState {
       const a = u64(addr + BigInt(i));
       if (!this.memory.has(a)) {
         if (a > MAX_ADDRESS) throw new ExecError(`Invalid address: ${a}`);
+        this.logByte(a);
         this.memory.set(a, 0);
       }
       out.push(a);
@@ -88,6 +160,7 @@ export class MachineState {
   /** Write the low `size` bytes of `value`. All bytes are validated before any is written. */
   writeMem(addr: bigint, size: number, value: bigint): void {
     this.touch(addr, size).forEach((a, i) => {
+      this.logByte(a);
       this.memory.set(a, Number((value >> BigInt(8 * i)) & 0xffn));
       this.changedRows.add(a - (a % 8n));
     });

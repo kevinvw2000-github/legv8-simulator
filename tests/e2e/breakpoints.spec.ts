@@ -65,7 +65,7 @@ test('a breakpoint on a label line applies to the next instruction', async ({ pa
 
 test('breakpoints can be added during a paused simulation', async ({ page }) => {
   await page.getByRole('button', { name: 'Enter simulation' }).click();
-  await page.getByRole('button', { name: 'Step' }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
   await toggleBreakpoint(page, 6);
   await page.getByRole('button', { name: 'Run' }).click();
   await expect(page.locator('#console')).toHaveText('Paused at breakpoint on line 6.');

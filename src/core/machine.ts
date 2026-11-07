@@ -3,7 +3,7 @@ import { parseValue } from './bits';
 import { execute } from './execute';
 import { instructionToString } from './isa';
 import { ParseError, parseProgram, type Program } from './parser';
-import { ExecError, MachineState, type Mode } from './state';
+import { ExecError, MachineState, type Mode, type StepRecord } from './state';
 
 /** Register/memory values as signed-decimal strings, matching the zyBooks display. */
 export interface Storage {
@@ -36,9 +36,16 @@ export class RuntimeError extends Error {
   }
 }
 
+/** How many steps Step back can undo by default (older steps are forgotten). */
+export const DEFAULT_HISTORY_LIMIT = 10_000;
+
 /** A loaded program plus its machine state. Drives both tests and the UI. */
 export class Machine {
   readonly state: MachineState;
+  /** Undo records, oldest first. Capped at `historyLimit`. */
+  private readonly history: StepRecord[] = [];
+  /** Steps that can be undone; 0 turns history off. */
+  historyLimit = DEFAULT_HISTORY_LIMIT;
 
   constructor(
     readonly program: Program,
@@ -65,16 +72,43 @@ export class Machine {
     const pc = this.state.pc;
     const ins = this.program.instructions[pc];
     if (!ins) return;
+    const recording = this.historyLimit > 0;
+    if (recording) this.state.beginRecord();
     this.state.clearChanges();
     try {
       this.state.pc = execute(ins, pc, this.state, this.program);
+      this.state.steps++;
     } catch (e) {
       if (e instanceof ExecError) {
         throw new RuntimeError(`Error: ${instructionToString(ins)}. ${e.message}`, pc);
       }
       throw e;
+    } finally {
+      // A failed step is recorded too, so Step back can undo its partial effects
+      // (e.g. memory entries created before an invalid address was reached).
+      if (recording) this.remember(this.state.endRecord());
     }
-    this.state.steps++;
+  }
+
+  /** Number of steps Step back can undo. */
+  get historyLength(): number {
+    return this.history.length;
+  }
+
+  /** Undo the most recent step. Returns false when there is nothing to undo. */
+  stepBack(): boolean {
+    const r = this.history.pop();
+    if (!r) return false;
+    this.state.undo(r);
+    return true;
+  }
+
+  private remember(r: StepRecord): void {
+    this.history.push(r);
+    // Trim in batches so a long run doesn't pay for a shift on every step.
+    if (this.history.length > this.historyLimit + 1000) {
+      this.history.splice(0, this.history.length - this.historyLimit);
+    }
   }
 
   storage(): Storage {
@@ -90,6 +124,7 @@ export function runProgram(source: string, initial: Storage, options: RunOptions
   let machine: Machine;
   try {
     machine = new Machine(parseProgram(source), initial, options.mode);
+    machine.historyLimit = 0; // No Step back needed when running straight through.
   } catch (e) {
     if (e instanceof ParseError) return { kind: 'parseError', message: e.display };
     throw e;

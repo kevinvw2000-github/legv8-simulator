@@ -97,6 +97,7 @@ export class App {
   private readonly els: {
     enter: HTMLButtonElement;
     exit: HTMLButtonElement;
+    back: HTMLButtonElement;
     step: HTMLButtonElement;
     run: HTMLButtonElement;
     pause: HTMLButtonElement;
@@ -118,6 +119,7 @@ export class App {
     this.els = {
       enter: $(root, '#enter'),
       exit: $(root, '#exit'),
+      back: $(root, '#back'),
       step: $(root, '#step'),
       run: $(root, '#run'),
       pause: $(root, '#pause'),
@@ -166,6 +168,7 @@ export class App {
 
     this.els.enter.addEventListener('click', () => this.enterSimulation());
     this.els.exit.addEventListener('click', () => this.exitSimulation());
+    this.els.back.addEventListener('click', () => this.stepBack());
     this.els.step.addEventListener('click', () => this.stepOnce());
     this.els.run.addEventListener('click', () => this.startRun());
     this.els.pause.addEventListener('click', () => this.pause());
@@ -258,7 +261,11 @@ export class App {
 
   // ---------- keyboard ----------
 
-  /** F5 Run/Continue · F6 Pause · F10 Step · F9 toggle breakpoint · Ctrl+Enter enter/exit. */
+  /**
+   * F5 Run/Continue · F6 Pause · F10 Step · Ctrl+Z Step back (while simulating; the editor is
+   * read-only then, so this doesn't clash with editing undo) · F9 toggle breakpoint ·
+   * Ctrl+Enter enter/exit.
+   */
   private onKey(e: KeyboardEvent): void {
     const sim = this.machine !== null;
     let handled = true;
@@ -269,6 +276,8 @@ export class App {
     else if (e.key === 'F10') {
       if (sim) this.stepOnce();
       else this.enterSimulation();
+    } else if (sim && (e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+      this.stepBack();
     } else if (e.key === 'F9') this.editor.toggleBreakpointAtCursor();
     else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       if (sim) this.exitSimulation();
@@ -380,6 +389,17 @@ export class App {
     this.render();
   }
 
+  /** Undo the last step, including a step that ended in an error. */
+  private stepBack(): void {
+    const m = this.machine;
+    if (!m || this.running || !m.stepBack()) return;
+    this.stopped = false;
+    this.editor.setErrorLine(null);
+    const line = m.program.instructions[m.state.pc]?.line;
+    this.log(line === undefined ? 'Stepped back.' : `Stepped back to line ${line}.`);
+    this.render();
+  }
+
   private startRun(): void {
     if (!this.machine || this.stopped || this.running) return;
     this.running = true;
@@ -449,13 +469,14 @@ export class App {
   private render(): void {
     const m = this.machine;
     const sim = m !== null;
-    const { enter, exit, step, run, pause, speed, mode, status } = this.els;
+    const { enter, exit, back, step, run, pause, speed, mode, status } = this.els;
 
     enter.hidden = sim;
     exit.hidden = !sim;
     run.hidden = this.running;
     pause.hidden = !this.running;
     step.disabled = !sim || this.running || this.stopped;
+    back.disabled = !sim || this.running || m.historyLength === 0;
     run.disabled = !sim || this.stopped;
     mode.disabled = sim;
     speed.disabled = false;
@@ -558,6 +579,7 @@ const TEMPLATE = `
       <button id="enter" type="button" class="primary">Enter simulation</button>
       <button id="exit" type="button" class="secondary" hidden>Exit simulation</button>
       <span class="divider" aria-hidden="true"></span>
+      <button id="back" type="button" disabled title="Undo the last step (Ctrl+Z)">Step back</button>
       <button id="step" type="button" disabled>Step</button>
       <button id="run" type="button" disabled>Run</button>
       <button id="pause" type="button" hidden>Pause</button>
@@ -567,7 +589,7 @@ const TEMPLATE = `
     </div>
     <div id="editor" class="editor"></div>
     <p class="hint">Click a line number to toggle a breakpoint.
-      <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step · <kbd>F9</kbd> Breakpoint · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Enter/Exit</p>
+      <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step · <kbd>Ctrl</kbd>+<kbd>Z</kbd> Step back · <kbd>F9</kbd> Breakpoint · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Enter/Exit</p>
     <output id="console" class="console" aria-live="polite"></output>
   </section>
   <aside class="side-pane">

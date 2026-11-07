@@ -28,9 +28,11 @@ npm run dev        # http://localhost:5173
 2. **Enter simulation** checks the whole program. A parse error is shown with its line marked.
 3. **Step** runs one instruction. **Run** runs at the chosen speed (Slow 3 s, Medium 2 s, Fast 1 s, Instant)
    until the program ends, an error occurs, you press **Pause**, or a breakpoint is reached.
-4. Click a **line number** to toggle a breakpoint. Run stops *before* that line; Run again continues.
+4. **Step back** undoes the last instruction, up to the last 10,000 steps. It also works after the program finishes
+   or stops with an error, so you can back up to just before the problem and step through it again.
+5. Click a **line number** to toggle a breakpoint. Run stops *before* that line; Run again continues.
    A breakpoint on a blank, comment or label line stops at the next instruction.
-5. **Exit simulation** returns to editing with your starting values restored.
+6. **Exit simulation** returns to editing with your starting values restored.
 
 During simulation the panels show only the registers and memory the program has read or written, as zyBooks does.
 Values that just changed are highlighted, and the flags (N Z C V), PC (byte address) and step count are shown.
@@ -38,7 +40,7 @@ Values that just changed are highlighted, and the flags (N Z C V), PC (byte addr
 decimal, hex and binary; hex also applies to the PC. Hover over any value to see all four. Starting values are
 still entered in decimal, and Import/Export always uses decimal.
 
-**Keyboard:** <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step ·
+**Keyboard:** <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step · <kbd>Ctrl</kbd>+<kbd>Z</kbd> Step back (while simulating) ·
 <kbd>F9</kbd> toggle breakpoint · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Enter/Exit simulation.
 
 **Import / Export** uses the zyBooks simulator's text format, so you can move a program and its starting values

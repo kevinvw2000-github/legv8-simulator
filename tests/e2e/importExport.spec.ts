@@ -26,7 +26,7 @@ test('import replaces code and values after confirmation', async ({ page }) => {
   await expect(page.locator('.cm-content')).toHaveText('LDUR X1, [X2, #0]');
 
   await page.getByRole('button', { name: 'Enter simulation' }).click();
-  await page.getByRole('button', { name: 'Step' }).click();
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
   await expect(page.locator('#registers tbody tr[data-key="X1"] td.value')).toHaveText('42');
 });
 
