@@ -55,8 +55,17 @@ optional name and a number of doublewords (up to 64). Watches can be added at an
 (but not in Import/Export, which uses zyBooks' format), and never add entries to the Memory panel. A `—` means
 the doubleword hasn't been accessed yet (it reads as 0).
 
+**Expected results** checks your program against values you expect when it ends. Enter them in the same pair
+format as zyBooks' Import (registers `X0 15, X9 -1`; memory `5000 1, 5008 350`, addresses a multiple of 8).
+While simulating, the Registers and Memory panels gain an **Expected** column. It shows the targets while you
+step, then ✓ or ✗ once the program finishes or stops on an error, with a summary in the console (for example
+"Expected values: 3 of 5 match. X2 is 6, expected 7"). Expected values the program never accessed are still
+listed, marked "not accessed", and count as 0. Only listed values are checked. **Show Expected column** hides the
+column and summary. Expected values are saved with your work and included in share links. This is a self-check
+against the values you entered, not a copy of how zyBooks scores labs.
+
 **Share link** (top bar) copies a link that opens your code, starting registers and memory, watches, breakpoints
-and semantics mode for whoever clicks it. Nothing is uploaded: everything is compressed into the part of the URL
+and semantics mode, plus expected results, for whoever clicks it. Nothing is uploaded: everything is compressed into the part of the URL
 after `#`, which browsers never send to a server. Opening a link shows a banner and leaves your own program alone
 until you choose **Keep it** (replace yours with the shared one) or **Back to my program**. A link that was cut off
 when pasted is reported as damaged instead of half-loading. Anyone with a link can read the code in it, so check

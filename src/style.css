@@ -339,3 +339,25 @@ button[data-armed] { background: var(--error-soft); border-color: var(--error); 
 .watch-table td.value { cursor: help; }
 body[data-format='binary'] .watch-table td.value { font-size: 11px; line-height: 1.35; }
 body[data-format='binary'] .watch-table tbody th { vertical-align: top; }
+
+/* ---------- expected results ---------- */
+
+.storage .col-expected { display: none; }
+.storage.simulating.with-expected .col-expected { display: table-cell; }
+.storage.simulating.with-expected thead th.col-expected { text-align: right; }
+.storage td.col-expected { text-align: right; overflow-wrap: anywhere; color: var(--muted); padding-left: 10px; }
+body[data-format='binary'] .storage td.col-expected { font-size: 11px; vertical-align: top; }
+.storage td.col-expected[data-status='ok'] { color: var(--ok); }
+.storage td.col-expected[data-status='bad'] { color: var(--error); font-weight: 650; }
+.storage tr.not-accessed th, .storage tr.not-accessed td.value { color: var(--muted); }
+.not-accessed-note { display: block; font: 400 11px system-ui, sans-serif; color: var(--muted); }
+.expected summary { cursor: pointer; font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.expected[open] summary { margin-bottom: 8px; }
+.expected-count { font-weight: 500; text-transform: none; }
+.expected-field { display: grid; gap: 3px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.expected-field input {
+  font: 13px var(--mono); padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); min-width: 0;
+}
+.expected-field input.invalid { border-color: var(--error); background: var(--error-soft); }
+.expected-show { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; }

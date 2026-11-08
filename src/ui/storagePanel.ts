@@ -15,6 +15,10 @@ export interface ViewRow {
   key: string;
   value: string;
   changed: boolean;
+  /** Listed only because a value is expected here; the program never accessed it. */
+  notAccessed?: boolean;
+  /** Expected-results cell. 'pending' while the program hasn't finished. */
+  expected?: { text: string; status: 'pending' | 'ok' | 'bad'; title: string };
 }
 
 export type PanelKind = 'registers' | 'memory';
@@ -53,7 +57,7 @@ export class StoragePanel {
     const label = kind === 'registers' ? 'Register' : 'Address';
     root.innerHTML = `
       <table class="storage-table">
-        <thead><tr><th scope="col">${label}</th><th scope="col">Value</th><th class="col-remove"><span class="sr-only">Remove</span></th></tr></thead>
+        <thead><tr><th scope="col">${label}</th><th scope="col">Value</th><th scope="col" class="col-expected">Expected</th><th class="col-remove"><span class="sr-only">Remove</span></th></tr></thead>
         <tbody></tbody>
       </table>
       <p class="storage-empty">Each has value 0</p>
@@ -85,9 +89,10 @@ export class StoragePanel {
   }
 
   /** Show the simulation view. Row values are signed decimal strings, displayed in `format`. */
-  showSimulation(rows: ViewRow[], format: ValueFormat = 'signed'): void {
+  showSimulation(rows: ViewRow[], format: ValueFormat = 'signed', withExpected = false): void {
     this.editing = false;
     this.root.classList.add('simulating');
+    this.root.classList.toggle('with-expected', withExpected);
     this.addButton.hidden = true;
     this.emptyNote.hidden = rows.length > 0;
     this.body.replaceChildren(
@@ -95,13 +100,26 @@ export class StoragePanel {
         const tr = document.createElement('tr');
         if (r.changed) tr.classList.add('changed');
         tr.dataset.key = r.key;
-        tr.innerHTML = `<th scope="row"></th><td class="value"></td><td class="col-remove"></td>`;
+        tr.innerHTML = `<th scope="row"></th><td class="value"></td><td class="col-expected"></td><td class="col-remove"></td>`;
         const value = BigInt(r.value);
         const cell = tr.children[1] as HTMLElement;
-        (tr.children[0] as HTMLElement).textContent = r.key;
+        const keyCell = tr.children[0] as HTMLElement;
+        keyCell.textContent = r.key;
         if (format === 'binary') cell.append(...binaryLines(formatValue(value, format)));
         else cell.textContent = formatValue(value, format);
         cell.title = describeValue(value);
+        if (r.notAccessed) {
+          tr.classList.add('not-accessed');
+          keyCell.append(el('span', 'not-accessed-note', 'not accessed'));
+          cell.title = `Not accessed (reads as 0)
+${cell.title}`;
+        }
+        if (r.expected) {
+          const exp = tr.children[2] as HTMLElement;
+          exp.dataset.status = r.expected.status;
+          exp.textContent = r.expected.text;
+          exp.title = r.expected.title;
+        }
         return tr;
       }),
     );
@@ -235,6 +253,13 @@ export function binaryLines(text: string): HTMLElement[] {
     el.append(half(nibbles.slice(0, 4)), ' ', half(nibbles.slice(4)));
     return el;
   });
+}
+
+function el(tag: string, className: string, text: string): HTMLElement {
+  const e = document.createElement(tag);
+  e.className = className;
+  e.textContent = text;
+  return e;
 }
 
 function markInvalid(el: HTMLElement, message: string): void {

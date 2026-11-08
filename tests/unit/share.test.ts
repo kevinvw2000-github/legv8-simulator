@@ -7,6 +7,7 @@ const WS: SharedWorkspace = {
   watches: [{ label: 'array', address: '4000', count: 3 }],
   breakpoints: [2],
   mode: 'arm',
+  expected: { registers: 'X1 5', memory: '4000 -7' },
 };
 
 describe('share links', () => {
@@ -44,6 +45,7 @@ describe('share links', () => {
       watches: [],
       breakpoints: [1],
       mode: 'zybooks',
+      expected: { registers: '', memory: '' },
     });
   });
 });

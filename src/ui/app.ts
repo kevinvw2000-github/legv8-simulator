@@ -10,8 +10,12 @@ import { CallsPanel } from './callsPanel';
 import { createEditor, type CodeEditor } from './editor';
 import { StoragePanel, type Entry } from './storagePanel';
 import type { WatchSpec } from '../core/watch';
-import { decodeShare, encodeShare, isShareHash, LONG_LINK, sanitizeWatches, type SharedWorkspace } from '../core/share';
+import { decodeShare, encodeShare, isShareHash, LONG_LINK, sanitizeExpected, sanitizeWatches, type SharedWorkspace } from '../core/share';
 import { WatchPanel } from './watchPanel';
+import { ExpectedPanel, NO_EXPECTED, type ExpectedSettings } from './expectedPanel';
+import { checkExpected, keyOrder, summarize, type CheckResult, type ExpectedKind } from '../core/expected';
+import { formatValue } from '../core/bits';
+import type { ViewRow } from './storagePanel';
 
 export const SPEEDS = { Slow: 3000, Medium: 2000, Fast: 1000, Instant: 0 } as const;
 export type Speed = keyof typeof SPEEDS;
@@ -28,6 +32,8 @@ interface Saved {
   breakpoints: number[];
   /** Pinned memory ranges (not part of zyBooks' import/export format). */
   watches: WatchSpec[];
+  /** Expected results to check when the program ends. */
+  expected: ExpectedSettings;
 }
 
 const STORAGE_KEY = 'legv8-sim:v1';
@@ -63,7 +69,13 @@ const DEFAULT: Saved = {
   format: 'signed',
   breakpoints: [],
   watches: [{ label: 'array', address: '4000', count: 3 }],
+  expected: NO_EXPECTED,
 };
+
+function loadExpected(v: unknown): ExpectedSettings {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Partial<ExpectedSettings>;
+  return { ...sanitizeExpected(v), show: o.show !== false, open: o.open === true };
+}
 
 function load(): Saved {
   try {
@@ -79,6 +91,7 @@ function load(): Saved {
       format: VALUE_FORMATS.includes(s.format as ValueFormat) ? (s.format as ValueFormat) : DEFAULT.format,
       breakpoints: Array.isArray(s.breakpoints) ? s.breakpoints.filter(Number.isInteger) : [],
       watches: sanitizeWatches(s.watches),
+      expected: loadExpected(s.expected),
     };
   } catch {
     return structuredClone(DEFAULT);
@@ -93,6 +106,7 @@ export class App {
   private readonly memory: StoragePanel;
   private readonly calls: CallsPanel;
   private readonly watch: WatchPanel;
+  private readonly expected: ExpectedPanel;
   private saved: Saved;
   /** While a share link is open: the user's own work, kept until they choose. */
   private ownWork: Saved | null = null;
@@ -177,6 +191,11 @@ export class App {
       this.saved.watches = w;
       this.save();
     });
+    this.expected = new ExpectedPanel($(root, '#expected'), this.saved.expected, (s) => {
+      this.saved.expected = s;
+      this.save();
+      this.render();
+    });
     this.registers.setEntries(this.saved.registers);
     this.memory.setEntries(this.saved.memory);
 
@@ -234,7 +253,9 @@ export class App {
 
   private async copyShareLink(): Promise<void> {
     const { code, registers, memory, watches, breakpoints, mode } = this.saved;
-    const url = location.origin + location.pathname + (await encodeShare({ code, registers, memory, watches, breakpoints, mode }));
+    const expected = { registers: this.saved.expected.registers, memory: this.saved.expected.memory };
+    const url =
+      location.origin + location.pathname + (await encodeShare({ code, registers, memory, watches, breakpoints, mode, expected }));
     const size = `${url.length.toLocaleString('en-US')} characters`;
     const long = url.length > LONG_LINK ? ' It is long, so some apps may cut it off; Export is safer for big programs.' : '';
     try {
@@ -261,7 +282,8 @@ export class App {
     }
     if (this.machine) this.exitSimulation();
     this.ownWork ??= structuredClone(this.saved);
-    this.applyWorkspace(ws);
+    const hasExpected = ws.expected.registers.trim() !== '' || ws.expected.memory.trim() !== '';
+    this.applyWorkspace({ ...ws, expected: { ...this.saved.expected, ...ws.expected, open: hasExpected } });
     document.body.dataset.shared = 'true';
     this.log("Opened a shared program. Your own program is kept until you choose Keep it.", 'ok');
   }
@@ -321,11 +343,19 @@ export class App {
   }
 
   private resetToDefault(): void {
-    this.applyWorkspace(structuredClone({ code: DEFAULT.code, registers: DEFAULT.registers, memory: DEFAULT.memory }));
+    this.applyWorkspace(
+      structuredClone({ code: DEFAULT.code, registers: DEFAULT.registers, memory: DEFAULT.memory, expected: DEFAULT.expected }),
+    );
     this.log('Reset to the demo program.', 'ok');
   }
 
-  private applyWorkspace(ws: Partial<Pick<Saved, 'code' | 'registers' | 'memory' | 'watches' | 'breakpoints' | 'mode'>>): void {
+  private applyWorkspace(
+    ws: Partial<Pick<Saved, 'code' | 'registers' | 'memory' | 'watches' | 'breakpoints' | 'mode' | 'expected'>>,
+  ): void {
+    if (ws.expected) {
+      this.saved.expected = ws.expected;
+      this.expected.setSettings(ws.expected);
+    }
     if (ws.code !== undefined) {
       this.editor.setCode(ws.code);
       this.editor.clearBreakpoints();
@@ -463,17 +493,67 @@ export class App {
       if (!(e instanceof RuntimeError)) throw e;
       this.stopped = true;
       this.stopReason = 'error';
-      this.log(e.message + signedHint(e.message), 'error');
+      this.log(e.message + signedHint(e.message) + this.expectedSummary(), 'error');
       this.editor.setErrorLine(m.program.instructions[e.pc]?.line ?? null);
       return false;
     }
     if (m.done) {
       this.stopped = true;
       this.stopReason = 'finished';
-      this.log(`Program finished after ${m.state.steps} step${m.state.steps === 1 ? '' : 's'}.`, 'ok');
+      const results = this.checkResults();
+      const summary = results ? `\n${summarize(results)}` : '';
+      const allOk = !results || results.every((r) => r.ok);
+      this.log(`Program finished after ${m.state.steps} step${m.state.steps === 1 ? '' : 's'}.${summary}`, allOk ? 'ok' : '');
       return false;
     }
     return true;
+  }
+
+  /** Expected-results check, or null when there's nothing to check (or the column is hidden). */
+  private checkResults(): CheckResult[] | null {
+    const m = this.machine;
+    if (!m || !this.expected.active()) return null;
+    const e = this.expected.entries();
+    return checkExpected(m.state, e.registers, e.memory);
+  }
+
+  private expectedSummary(): string {
+    const results = this.checkResults();
+    return results ? `\n${summarize(results)}` : '';
+  }
+
+  /**
+   * Panel rows with the Expected column: expected cells on matching rows, plus rows for expected
+   * values the program never accessed. Judged (pass/fail) only once the program has stopped.
+   */
+  private withExpected(
+    kind: ExpectedKind,
+    rows: ViewRow[],
+    results: CheckResult[],
+    judged: boolean,
+    format: ValueFormat,
+  ): ViewRow[] {
+    const byKey = new Map(results.filter((r) => r.kind === kind).map((r) => [r.key, r]));
+    const shown = format === 'binary' ? 'hex' : format;
+    const cell = (r: CheckResult): NonNullable<ViewRow['expected']> => {
+      const text = formatValue(r.expected, shown);
+      if (!judged) return { text, status: 'pending', title: 'Checked when the program ends' };
+      return r.ok
+        ? { text: `✓ ${text}`, status: 'ok', title: 'Matches' }
+        : { text: `✗ ${text}`, status: 'bad', title: `Expected ${s64(r.expected)}, but it is ${s64(r.actual)}` };
+    };
+    const out: ViewRow[] = rows.map((row) => {
+      const r = byKey.get(row.key);
+      byKey.delete(row.key);
+      return r ? { ...row, expected: cell(r) } : row;
+    });
+    for (const r of byKey.values()) {
+      out.push({ key: r.key, value: s64(r.actual).toString(), changed: false, notAccessed: !r.accessed, expected: cell(r) });
+    }
+    return out.sort((a, b) => {
+      const d = keyOrder(kind, a.key) - keyOrder(kind, b.key);
+      return d < 0n ? -1 : d > 0n ? 1 : 0;
+    });
   }
 
   private stepOnce(): void {
@@ -593,14 +673,16 @@ export class App {
 
     const st = m.state;
     const format = this.saved.format;
-    this.registers.showSimulation(
-      st.registerView().map((r) => ({ key: r.name, value: r.value, changed: r.changed })),
-      format,
-    );
-    this.memory.showSimulation(
-      st.memoryView().map((r) => ({ key: r.address, value: r.value, changed: r.changed })),
-      format,
-    );
+    let regRows: ViewRow[] = st.registerView().map((r) => ({ key: r.name, value: r.value, changed: r.changed }));
+    let memRows: ViewRow[] = st.memoryView().map((r) => ({ key: r.address, value: r.value, changed: r.changed }));
+    const results = this.checkResults();
+    if (results) {
+      const judged = m.done || this.stopped;
+      regRows = this.withExpected('registers', regRows, results, judged, format);
+      memRows = this.withExpected('memory', memRows, results, judged, format);
+    }
+    this.registers.showSimulation(regRows, format, results !== null);
+    this.memory.showSimulation(memRows, format, results !== null);
     this.els.flags.replaceChildren(...flagChips(st.flags));
     const pcBytes = st.pc * 4;
     this.els.pc.textContent = m.done ? 'end' : format === 'hex' ? `0x${pcBytes.toString(16).toUpperCase()}` : String(pcBytes);
@@ -739,6 +821,7 @@ const TEMPLATE = `
       <h2 id="mem-title">Memory</h2>
       <div id="memory" class="storage"></div>
     </section>
+    <details id="expected" class="panel expected"></details>
     <section class="panel watch" aria-labelledby="watch-title">
       <h2 id="watch-title">Watch</h2>
       <div id="watch"></div>

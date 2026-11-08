@@ -11,6 +11,8 @@ export interface SharedWorkspace {
   watches: WatchSpec[];
   breakpoints: number[];
   mode: Mode;
+  /** Expected-results fields in pair format ("X0 15, X9 -1"). */
+  expected: { registers: string; memory: string };
 }
 
 const PREFIX = '#s1=';
@@ -86,5 +88,13 @@ function sanitize(data: unknown): SharedWorkspace {
     watches: sanitizeWatches(d.watches),
     breakpoints: Array.isArray(d.breakpoints) ? d.breakpoints.filter((n) => Number.isInteger(n) && n > 0) : [],
     mode: d.mode === 'arm' ? 'arm' : 'zybooks',
+    expected: sanitizeExpected(d.expected),
   };
+}
+
+/** Expected-results text fields; anything else becomes empty. */
+export function sanitizeExpected(v: unknown): { registers: string; memory: string } {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>;
+  const text = (x: unknown) => (typeof x === 'string' ? x.slice(0, 4000) : '');
+  return { registers: text(o.registers), memory: text(o.memory) };
 }
