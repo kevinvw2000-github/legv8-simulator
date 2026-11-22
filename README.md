@@ -1,5 +1,7 @@
 # LEGv8 Simulator
 
+**▶ [Open the simulator](https://kevinvw2000-github.github.io/legv8-simulator/)** (runs in your browser; nothing to install)
+
 A browser-based simulator for the LEGv8 teaching subset of ARMv8, with a debugger-style interface. It runs
 programs the same way as the zyBooks LEGv8 simulator, producing the same register and memory results and the
 same error messages. An optional ARM-accurate mode fixes zyBooks' known quirks, and a Full LEGv8 mode adds the
