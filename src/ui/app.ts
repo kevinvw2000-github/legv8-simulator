@@ -14,6 +14,7 @@ import { decodeShare, encodeShare, isShareHash, LONG_LINK, sanitizeExpected, san
 import { WatchPanel } from './watchPanel';
 import { ExpectedPanel, NO_EXPECTED, type ExpectedSettings } from './expectedPanel';
 import { HelpPanel } from './helpPanel';
+import { simulationHover, type HoverContext } from './hover';
 import { checkExpected, keyOrder, summarize, type CheckResult, type ExpectedKind } from '../core/expected';
 import { formatValue } from '../core/bits';
 import type { ViewRow } from './storagePanel';
@@ -178,6 +179,7 @@ export class App {
         this.updateBreakpointPcs();
         this.els.clearBps.disabled = lines.length === 0;
       },
+      [simulationHover(() => this.hoverContext())],
     );
     this.editor.setBreakpoints(this.saved.breakpoints);
     this.registers = new StoragePanel($(root, '#registers'), 'registers', (e) => {
@@ -254,6 +256,19 @@ export class App {
 
     this.render();
     void this.openShareFromHash();
+  }
+
+  /** What the editor's register hover needs, or null when not simulating. */
+  private hoverContext(): HoverContext | null {
+    const m = this.machine;
+    if (!m) return null;
+    const line = m.program.instructions[m.state.pc]?.line;
+    const when = this.running
+      ? 'now'
+      : this.stopped
+        ? this.stopReason === 'error' ? 'when the program stopped' : 'at the end of the program'
+        : `before line ${line} runs`;
+    return { st: m.state, program: m.program, format: this.saved.format, when };
   }
 
   /** Change the compatibility mode (from the top bar or from Help). */

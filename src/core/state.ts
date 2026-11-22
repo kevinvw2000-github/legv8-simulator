@@ -120,16 +120,21 @@ export class MachineState {
     else this.storeOrigins.delete(addr);
   }
 
-  /** Read a doubleword without marking it accessed (for inspection panels). */
-  peekDoubleword(addr: bigint): { value: bigint; present: boolean } {
+  /** Read `size` bytes (little-endian) without marking them accessed (for inspection panels). */
+  peekBytes(addr: bigint, size: number): { value: bigint; present: boolean } {
     let value = 0n;
     let present = false;
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < size; i++) {
       const b = this.memory.get(u64(addr + BigInt(i)));
       if (b !== undefined) present = true;
       value |= BigInt(b ?? 0) << BigInt(8 * i);
     }
     return { value, present };
+  }
+
+  /** Read a doubleword without marking it accessed. */
+  peekDoubleword(addr: bigint): { value: bigint; present: boolean } {
+    return this.peekBytes(addr, 8);
   }
 
   /** Stop logging and return what the step changed. */

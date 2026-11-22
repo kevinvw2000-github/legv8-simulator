@@ -80,6 +80,14 @@ registers, LEGv8 textbook instructions zyBooks doesn't accept (with what to writ
 `SUBS XZR, …`) and the keyboard shortcuts. The instruction list is built from the same tables the parser uses, and
 tests check that it can't drift from what the simulator accepts.
 
+**Register hover:** while simulating, rest the pointer on a register in your code (`X5`, `XZR`, …) to see its
+current value in decimal, unsigned, hex and binary, with your chosen format emphasized. `X28` is labeled as the
+stack pointer, and `X30` shows the line it will return to. Over the `[Xn, #off]` part of a load or store it shows
+the address that works out to (`= X28 (800) + 8`) and what's in memory there, or warns that the address isn't valid.
+The tooltip says when the value is from ("before line 4 runs", "at the end of the program") and updates live while
+the program runs or steps. Hovering never marks anything accessed, so it adds no rows to the Registers or Memory
+panels. It needs a mouse pointer; there's no hover on touch screens yet.
+
 **Keyboard:** <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step · <kbd>Ctrl</kbd>+<kbd>Z</kbd> Step back (while simulating) ·
 <kbd>F9</kbd> toggle breakpoint · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Enter/Exit simulation.
 
