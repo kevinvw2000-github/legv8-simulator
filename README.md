@@ -71,6 +71,15 @@ until you choose **Keep it** (replace yours with the shared one) or **Back to my
 when pasted is reported as damaged instead of half-loading. Anyone with a link can read the code in it, so check
 your course's rules before sharing graded work.
 
+**Help** (top bar) lists every instruction the simulator accepts, grouped, with its syntax, a one-line meaning,
+its number ranges and whether it sets or reads the flags. Search narrows the list, and **Insert** adds an example
+line to your code. It follows the **Semantics** setting: the few instructions that behave differently in
+zyBooks-compatible and ARM-accurate mode (the flag-setting instructions, `SDIV`, `MOVZ`/`MOVK`) carry a note for
+the selected mode, and **Show how the other mode differs** adds the other one. Help also covers the syntax rules,
+registers, LEGv8 textbook instructions zyBooks doesn't accept (with what to write instead, such as `CMP` →
+`SUBS XZR, …`) and the keyboard shortcuts. The instruction list is built from the same tables the parser uses, and
+tests check that it can't drift from what the simulator accepts.
+
 **Keyboard:** <kbd>F5</kbd> Run/Continue · <kbd>F6</kbd> Pause · <kbd>F10</kbd> Step · <kbd>Ctrl</kbd>+<kbd>Z</kbd> Step back (while simulating) ·
 <kbd>F9</kbd> toggle breakpoint · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Enter/Exit simulation.
 

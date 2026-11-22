@@ -173,6 +173,8 @@ export interface CodeEditor {
   clearBreakpoints(): void;
   /** Scroll a line (1-based) to the middle of the editor and flash it briefly. */
   revealLine(line: number): void;
+  /** Add a line of code after the cursor's line (or in place of it, if that line is blank) and focus the editor. */
+  insertLine(text: string): void;
 }
 
 export function createEditor(
@@ -249,6 +251,17 @@ export function createEditor(
         el.classList.add('cm-flash');
         window.setTimeout(() => el.classList.remove('cm-flash'), 1200);
       });
+    },
+    insertLine: (text) => {
+      const line = view.state.doc.lineAt(view.state.selection.main.head);
+      const blank = line.text.trim() === '';
+      const anchor = blank ? line.from + text.length : line.to + 1 + text.length;
+      view.dispatch({
+        changes: blank ? { from: line.from, to: line.to, insert: text } : { from: line.to, insert: `\n${text}` },
+        selection: { anchor },
+        effects: EditorView.scrollIntoView(anchor, { y: 'nearest' }),
+      });
+      view.focus();
     },
     getBreakpoints: () => breakpointLines(view.state),
     setBreakpoints: (lines) => {

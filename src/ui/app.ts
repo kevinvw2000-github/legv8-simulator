@@ -13,6 +13,7 @@ import type { WatchSpec } from '../core/watch';
 import { decodeShare, encodeShare, isShareHash, LONG_LINK, sanitizeExpected, sanitizeWatches, type SharedWorkspace } from '../core/share';
 import { WatchPanel } from './watchPanel';
 import { ExpectedPanel, NO_EXPECTED, type ExpectedSettings } from './expectedPanel';
+import { HelpPanel } from './helpPanel';
 import { checkExpected, keyOrder, summarize, type CheckResult, type ExpectedKind } from '../core/expected';
 import { formatValue } from '../core/bits';
 import type { ViewRow } from './storagePanel';
@@ -107,6 +108,7 @@ export class App {
   private readonly calls: CallsPanel;
   private readonly watch: WatchPanel;
   private readonly expected: ExpectedPanel;
+  private readonly help: HelpPanel;
   private saved: Saved;
   /** While a share link is open: the user's own work, kept until they choose. */
   private ownWork: Saved | null = null;
@@ -186,6 +188,11 @@ export class App {
       this.saved.memory = e;
       this.save();
     });
+    this.help = new HelpPanel(
+      $(root, '#help'),
+      (mode) => this.setMode(mode),
+      (line) => this.editor.insertLine(line),
+    );
     this.calls = new CallsPanel($(root, '#calls'), (line) => this.editor.revealLine(line));
     this.watch = new WatchPanel($(root, '#watch'), this.saved.watches, (w) => {
       this.saved.watches = w;
@@ -217,10 +224,10 @@ export class App {
         this.scheduleNext();
       }
     });
-    this.els.mode.addEventListener('change', () => {
-      this.saved.mode = this.els.mode.value as Mode;
-      this.save();
-    });
+    this.els.mode.addEventListener('change', () => this.setMode(this.els.mode.value as Mode));
+    $<HTMLButtonElement>(root, '#help-btn').addEventListener('click', () =>
+      this.help.open({ mode: this.saved.mode, simulating: this.machine !== null }),
+    );
     for (const radio of root.querySelectorAll<HTMLInputElement>('input[name="format"]')) {
       radio.checked = radio.value === this.saved.format;
       radio.addEventListener('change', () => {
@@ -247,6 +254,14 @@ export class App {
 
     this.render();
     void this.openShareFromHash();
+  }
+
+  /** Change the compatibility mode (from the top bar or from Help). */
+  private setMode(mode: Mode): void {
+    this.saved.mode = mode;
+    this.els.mode.value = mode;
+    this.save();
+    if (this.help.isOpen()) this.help.update({ mode, simulating: this.machine !== null });
   }
 
   // ---------- share links ----------
@@ -390,6 +405,7 @@ export class App {
    * Ctrl+Enter enter/exit.
    */
   private onKey(e: KeyboardEvent): void {
+    if (this.help.isOpen()) return; // the Help dialog handles its own keys (Esc closes it)
     const sim = this.machine !== null;
     let handled = true;
     if (e.key === 'F5' && !e.ctrlKey) {
@@ -773,7 +789,10 @@ const TEMPLATE = `
   <h1>LEGv8 Simulator
     <a class="version" href="https://github.com/kevinvw2000-github/legv8-simulator/releases"
        target="_blank" rel="noopener" title="Release notes">v${__APP_VERSION__}</a></h1>
-  <button id="share" type="button" class="share" title="Copy a link that opens this program, its starting values, watches and breakpoints">Share link</button>
+  <div class="top-actions">
+    <button id="help-btn" type="button" title="Instruction set, syntax rules and what zyBooks supports">Help</button>
+    <button id="share" type="button" title="Copy a link that opens this program, its starting values, watches and breakpoints">Share link</button>
+  </div>
   <label class="mode">Semantics
     <select id="mode" title="zyBooks reproduces the zyBooks simulator exactly, including its quirks">
       <option value="zybooks">zyBooks-compatible</option>
@@ -847,4 +866,5 @@ const TEMPLATE = `
       </div>
     </details>
   </aside>
-</main>`;
+</main>
+<dialog id="help" class="help"></dialog>`;
