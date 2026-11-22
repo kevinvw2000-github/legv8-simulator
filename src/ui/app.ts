@@ -16,6 +16,8 @@ import { ExpectedPanel, NO_EXPECTED, type ExpectedSettings } from './expectedPan
 import { HelpPanel } from './helpPanel';
 import { simulationHover, type HoverContext } from './hover';
 import { convertToZyBooks, findFullOnly, parseHint } from '../core/fullmode';
+import { EXAMPLE_GROUPS, EXAMPLES, type Example } from '../core/examples';
+import { MODE_INFO } from '../core/help';
 import { checkExpected, keyOrder, summarize, type CheckResult, type ExpectedKind } from '../core/expected';
 import { formatValue } from '../core/bits';
 import type { ViewRow } from './storagePanel';
@@ -134,6 +136,7 @@ export class App {
     pause: HTMLButtonElement;
     speed: HTMLSelectElement;
     mode: HTMLSelectElement;
+    examples: HTMLSelectElement;
     modeBadge: HTMLElement;
     convert: HTMLButtonElement;
     clearBps: HTMLButtonElement;
@@ -158,6 +161,7 @@ export class App {
       pause: $(root, '#pause'),
       speed: $(root, '#speed'),
       mode: $(root, '#mode'),
+      examples: $(root, '#examples'),
       modeBadge: $(root, '#mode-badge'),
       convert: $(root, '#convert'),
       clearBps: $(root, '#clear-bps'),
@@ -233,6 +237,7 @@ export class App {
     });
     this.els.mode.addEventListener('change', () => this.setMode(this.els.mode.value as Mode));
     this.els.convert.addEventListener('click', () => this.convertForZyBooks());
+    this.fillExamplesMenu();
     $<HTMLButtonElement>(root, '#help-btn').addEventListener('click', () =>
       this.help.open({ mode: this.saved.mode, simulating: this.machine !== null }),
     );
@@ -284,6 +289,52 @@ export class App {
     this.save();
     this.render();
     if (this.help.isOpen()) this.help.update({ mode, simulating: this.machine !== null });
+  }
+
+  // ---------- examples ----------
+
+  private fillExamplesMenu(): void {
+    const menu = this.els.examples;
+    menu.add(new Option('Examples', ''));
+    for (const group of EXAMPLE_GROUPS) {
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = group;
+      for (const ex of EXAMPLES.filter((e) => e.group === group)) optgroup.append(new Option(ex.title, ex.id));
+      menu.append(optgroup);
+    }
+    menu.addEventListener('change', () => {
+      const ex = EXAMPLES.find((e) => e.id === menu.value);
+      menu.value = ''; // the menu is a launcher; it always goes back to its label
+      if (ex) this.openExample(ex);
+    });
+  }
+
+  /** Load an example. Like a shared link, it leaves your own program alone until you choose Keep it. */
+  private openExample(ex: Example): void {
+    if (this.machine) return; // the menu is disabled while simulating
+    clearHash();
+    this.ownWork ??= structuredClone(this.saved);
+    const switches = ex.mode !== this.saved.mode ? `, which switches Compatibility to ${MODE_INFO[ex.mode].name}` : '';
+    this.applyWorkspace({
+      code: ex.code,
+      registers: ex.registers.map((r) => ({ ...r })),
+      memory: ex.memory.map((m) => ({ ...m })),
+      watches: ex.watches.map((w) => ({ ...w })),
+      breakpoints: ex.breakpoints ?? [],
+      mode: ex.mode,
+      expected: { ...ex.expected, show: true, open: ex.expected.registers !== '' || ex.expected.memory !== '' },
+    });
+    this.showBanner(`You're viewing the example “${ex.title}”${switches}.`);
+    document.body.dataset.shared = 'true';
+    this.log(`Example: ${ex.title}. ${ex.description}`, 'ok');
+  }
+
+  /** The banner above the editor while a shared program or an example is open. */
+  private showBanner(lead: string): void {
+    const text = document.querySelector('#shared-text') as HTMLElement;
+    const keep = document.createElement('strong');
+    keep.textContent = 'Keep it';
+    text.replaceChildren(`${lead} Your own program is safe; `, keep, ' replaces it with this one.');
   }
 
   /** Rewrite Full LEGv8 code so zyBooks accepts it, and switch to zyBooks mode if nothing is left over. */
@@ -351,6 +402,7 @@ export class App {
     }
     if (this.machine) this.exitSimulation();
     this.ownWork ??= structuredClone(this.saved);
+    this.showBanner("You're viewing a shared program.");
     const hasExpected = ws.expected.registers.trim() !== '' || ws.expected.memory.trim() !== '';
     this.applyWorkspace({ ...ws, expected: { ...this.saved.expected, ...ws.expected, open: hasExpected } });
     document.body.dataset.shared = 'true';
@@ -730,6 +782,7 @@ export class App {
     this.els.modeBadge.hidden = this.saved.mode !== 'full';
     this.els.convert.hidden = this.saved.mode !== 'full';
     this.els.convert.disabled = sim;
+    this.els.examples.disabled = sim;
     speed.disabled = false;
     for (const b of this.els.ioButtons) b.disabled = sim;
 
@@ -852,6 +905,7 @@ const TEMPLATE = `
     <a class="version" href="https://github.com/kevinvw2000-github/legv8-simulator/releases"
        target="_blank" rel="noopener" title="Release notes">v${__APP_VERSION__}</a></h1>
   <div class="top-actions">
+    <select id="examples" aria-label="Examples" title="Load an example program. Your own program is kept until you choose Keep it."></select>
     <button id="help-btn" type="button" title="Instruction set, syntax rules and what zyBooks supports">Help</button>
     <button id="share" type="button" title="Copy a link that opens this program, its starting values, watches and breakpoints">Share link</button>
   </div>
@@ -868,7 +922,7 @@ const TEMPLATE = `
   </div>
 </header>
 <div class="shared-banner" role="region" aria-label="Shared program">
-  <p>You're viewing a shared program. Your own program is safe; <strong>Keep it</strong> replaces it with this one.</p>
+  <p id="shared-text">You're viewing a shared program. Your own program is safe; <strong>Keep it</strong> replaces it with this one.</p>
   <button id="keep-shared" type="button" class="primary">Keep it</button>
   <button id="back-mine" type="button">Back to my program</button>
 </div>

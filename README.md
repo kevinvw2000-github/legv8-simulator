@@ -68,6 +68,17 @@ instructions that aren't available (with what to write instead, such as `CMP` â†
 shortcuts. The instruction list is built from the same tables the parser uses, and tests check that it can't drift
 from what the simulator accepts.
 
+**Examples** (top bar) loads a ready-made program with its starting values, watches and expected results. There are
+twelve, in groups: *Basics* (add two numbers, sum an array), *Numbers and bits* (signed vs unsigned comparisons),
+*Memory* (copy an array in reverse, bytes and endianness), *Procedures* (a simple call, recursion, and two common
+bugs with their fix: forgetting to save `X30`, and a stack pointer that was never set), *Debugging* (an off-by-one
+loop that the Expected column flags) and *Full LEGv8* (a textbook-style program using `CMP`, `MOV` and `SP`). The
+bug examples are meant to be stepped through: for instance the `X30` one stops at a breakpoint right before the bad
+return and the Call stack panel explains what went wrong. Opening an example never replaces your own program: it
+shows the same banner as a shared link, and **Keep it** or **Back to my program** decides what happens next (an
+example that needs a different Compatibility setting switches it and says so). They are original programs, written
+for this simulator.
+
 **Compatibility** (top bar) chooses what the simulator accepts and how it behaves:
 
 | Choice | Instructions | Behavior | Runs in zyBooks? |
