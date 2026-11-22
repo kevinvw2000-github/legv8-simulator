@@ -9,7 +9,13 @@ export const XZR = 31;
 /** Largest valid byte address in zyBooks' ARM memory (2^62 − 1). */
 export const MAX_ADDRESS = (1n << 62n) - 1n;
 
-export type Mode = 'zybooks' | 'arm';
+/**
+ * zybooks: reproduces the zyBooks simulator, quirks included.
+ * arm:     the same instructions, with real ARM behavior where zyBooks differs.
+ * full:    ARM behavior plus textbook LEGv8 extras zyBooks doesn't accept (see fullmode.ts).
+ */
+export type Mode = 'zybooks' | 'arm' | 'full';
+export const MODES: readonly Mode[] = ['zybooks', 'arm', 'full'];
 
 export interface Flags {
   N: boolean;

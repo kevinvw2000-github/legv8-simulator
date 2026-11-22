@@ -439,3 +439,15 @@ body[data-format='binary'] .storage td.col-expected { font-size: 11px; vertical-
   .hv { padding: 5px 7px; }
   .hv-grid { font-size: 10px; column-gap: 6px; }
 }
+.help-chip-full { background: var(--accent-soft); color: var(--accent); }
+.help-full-col { text-align: center; color: var(--muted); }
+
+/* ---------- compatibility mode ---------- */
+
+.mode-wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 10px; }
+.mode-badge {
+  font-size: 11px; padding: 1px 8px; border-radius: 999px;
+  background: var(--changed); border: 1px solid var(--border); color: var(--text);
+}
+.mode-wrap [hidden] { display: none; }
+.mode-wrap button { font-size: 13px; padding-block: 3px; }

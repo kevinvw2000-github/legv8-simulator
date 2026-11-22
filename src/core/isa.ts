@@ -46,6 +46,25 @@ export const MNEMONIC_FORMAT: Readonly<Record<string, Format>> = {
   MOVZ: 'IM', MOVK: 'IM',
 };
 
+/** Real LEGv8 instructions zyBooks doesn't have. Accepted only in Full LEGv8 mode. */
+export const EXTRA_MNEMONIC_FORMAT: Readonly<Record<string, Format>> = {
+  ANDS: 'R', UDIV: 'R', SMULH: 'R', UMULH: 'R', ANDIS: 'I',
+};
+
+/** Textbook shorthands the assembler expands into real instructions (Full LEGv8 only). */
+export const PSEUDO_OPS: readonly string[] = ['CMP', 'CMPI', 'MOV'];
+
+/** Register nicknames from the textbook (Full LEGv8 only). */
+export const NICKNAMES: Readonly<Record<string, string>> = {
+  SP: 'X28', FP: 'X29', LR: 'X30', IP0: 'X16', IP1: 'X17',
+};
+
+/**
+ * Inclusive ranges of constants in Full LEGv8 mode: the union of zyBooks' signed range and the
+ * textbook's unsigned one (12-bit immediates 0 to 4095; 16-bit MOVZ/MOVK pieces 0 to 65535).
+ */
+export const FULL_RANGES = { I: [-1024, 4095], IM: [-32768, 65535] } as const;
+
 export const REGISTER_NAMES: readonly string[] = [
   ...Array.from({ length: 31 }, (_, i) => `X${i}`),
   'XZR',

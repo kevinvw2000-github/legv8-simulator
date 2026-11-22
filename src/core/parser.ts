@@ -2,19 +2,26 @@
 // Error messages and their ordering match the zyBooks simulator (docs/COMPATIBILITY.md).
 
 import {
+  EXTRA_MNEMONIC_FORMAT,
   FORMAT_TOKENS,
+  FULL_RANGES,
   IMMEDIATE_BITS,
   MNEMONIC_FORMAT,
   MOV_SHIFTS,
+  NICKNAMES,
+  PSEUDO_OPS,
   REGISTER_NAMES,
   signedRange,
   type Instruction,
   type TokenKind,
 } from './isa';
+import type { Mode } from './state';
 
 export interface Token {
   kind: TokenKind;
   text: string;
+  /** Offset of the token in its line. */
+  index: number;
 }
 
 export interface Program {
@@ -67,7 +74,7 @@ export function tokenizeLine(text: string, line: number): Token[] {
       const m = rule.re.exec(rest);
       if (!m) continue;
       if (rule.kind !== 'space' && rule.kind !== 'comment') {
-        tokens.push({ kind: rule.kind, text: m[0] });
+        tokens.push({ kind: rule.kind, text: m[0], index: text.length - rest.length });
       }
       rest = rest.slice(m[0].length);
       matched = true;
@@ -82,17 +89,70 @@ function checkRegister(name: string): void {
   if (!REGISTER_NAMES.includes(name)) throw new Error(`${name} is not a valid register name`);
 }
 
-function checkSigned(value: number, bits: number): void {
-  const [lo, hi] = signedRange(bits);
+function checkRange(value: number, lo: number, hi: number): void {
   if (value < lo || value > hi) throw new Error(`${value} is out of range. Valid range: ${lo} to ${hi}`);
 }
 
-/** Build and validate one instruction from its mnemonic and operand tokens. */
-function buildInstruction(op: string, operands: Token[], line: number): Instruction {
-  const format = Object.hasOwn(MNEMONIC_FORMAT, op) ? MNEMONIC_FORMAT[op] : undefined;
-  if (!format) throw new ParseError(`Unrecognized op code: ${op}`, line);
+function checkSigned(value: number, bits: number): void {
+  const [lo, hi] = signedRange(bits);
+  checkRange(value, lo, hi);
+}
 
-  const expected = FORMAT_TOKENS[format];
+const tok = (kind: TokenKind, text: string): Token => ({ kind, text, index: 0 });
+const XZR = tok('register', 'XZR');
+const COMMA = tok('comma', ',');
+
+/**
+ * Expand a textbook shorthand (Full LEGv8 only) into the real instruction it stands for:
+ * CMP Xn, Xm -> SUBS XZR, Xn, Xm; CMPI Xn, #imm -> SUBIS XZR, Xn, #imm;
+ * MOV Xd, Xn -> ADD Xd, Xn, XZR; MOV Xd, #imm -> ADDI (or MOVZ for larger numbers).
+ */
+function expandPseudo(op: string, operands: Token[], line: number, mode: Mode): Instruction {
+  const kinds = operands.map((t) => t.kind).join(' ');
+  const reg2 = 'register comma register';
+  const regImm = 'register comma hash number';
+  if (op === 'CMP' && kinds === reg2) return buildInstruction('SUBS', [XZR, COMMA, ...operands], line, mode);
+  if (op === 'CMPI' && kinds === regImm) return buildInstruction('SUBIS', [XZR, COMMA, ...operands], line, mode);
+  if (op === 'MOV' && kinds === reg2) {
+    return buildInstruction('ADD', [operands[0]!, COMMA, operands[2]!, COMMA, XZR], line, mode);
+  }
+  if (op === 'MOV' && kinds === regImm) {
+    const n = Number(operands[3]!.text);
+    const [lo, hi] = FULL_RANGES.I;
+    if (n < lo || n > 65535) throw new ParseError(`${n} is out of range. Valid range: ${lo} to 65535`, line);
+    if (n > hi) {
+      // Too big for ADDI: a MOVZ puts it in the low 16 bits.
+      const movz = [operands[0]!, COMMA, operands[3]!, COMMA, tok('word', 'LSL'), tok('number', '0')];
+      return buildInstruction('MOVZ', movz, line, mode);
+    }
+    return buildInstruction('ADDI', [operands[0]!, COMMA, XZR, COMMA, ...operands.slice(2)], line, mode);
+  }
+  throw new ParseError('Instruction has an error.', line);
+}
+
+/** Build and validate one instruction from its mnemonic and operand tokens. */
+function buildInstruction(op: string, operands: Token[], line: number, mode: Mode): Instruction {
+  const full = mode === 'full';
+  const isPseudo = full && PSEUDO_OPS.includes(op);
+  const format = Object.hasOwn(MNEMONIC_FORMAT, op)
+    ? MNEMONIC_FORMAT[op]
+    : full && Object.hasOwn(EXTRA_MNEMONIC_FORMAT, op)
+      ? EXTRA_MNEMONIC_FORMAT[op]
+      : undefined;
+  if (!format && !isPseudo) throw new ParseError(`Unrecognized op code: ${op}`, line);
+
+  const expected = format ? FORMAT_TOKENS[format] : undefined;
+  if (full) {
+    // Nicknames (SP, LR, ...) become the registers they name, wherever a register is expected.
+    // Elsewhere (e.g. a label that happens to be called SP) they are left alone.
+    operands = operands.map((t, i) =>
+      t.kind === 'word' && Object.hasOwn(NICKNAMES, t.text) && (isPseudo || expected?.[i] === 'register')
+        ? { kind: 'register', text: NICKNAMES[t.text]!, index: t.index }
+        : t,
+    );
+  }
+  if (isPseudo) return expandPseudo(op, operands, line, mode);
+  if (!format || !expected) throw new ParseError(`Unrecognized op code: ${op}`, line);
   const kinds = operands.map((t) => t.kind);
   if (kinds.length !== expected.length || kinds.some((k, i) => k !== expected[i])) {
     throw new ParseError('Instruction has an error.', line);
@@ -113,7 +173,8 @@ function buildInstruction(op: string, operands: Token[], line: number): Instruct
       case 'I':
         checkRegister(at(0));
         checkRegister(at(1));
-        checkSigned(num(2), IMMEDIATE_BITS.I);
+        if (full) checkRange(num(2), ...FULL_RANGES.I);
+        else checkSigned(num(2), IMMEDIATE_BITS.I);
         return { format, op, line, rd: at(0), rn: at(1), imm: num(2) };
       case 'D':
         checkRegister(at(0));
@@ -130,7 +191,8 @@ function buildInstruction(op: string, operands: Token[], line: number): Instruct
         return { format, op, line, rn: at(0) };
       case 'IM': {
         checkRegister(at(0));
-        checkSigned(num(1), IMMEDIATE_BITS.IM);
+        if (full) checkRange(num(1), ...FULL_RANGES.IM);
+        else checkSigned(num(1), IMMEDIATE_BITS.IM);
         if (at(2) !== 'LSL') throw new Error(`${at(2)} must be 'LSL'`);
         if (!MOV_SHIFTS.includes(num(3))) throw new Error(`${num(3)} must be 0, 16, 32, or 48.`);
         return { format, op, line, rd: at(0), imm: num(1), shift: num(3) };
@@ -147,7 +209,7 @@ function buildInstruction(op: string, operands: Token[], line: number): Instruct
  * Like zyBooks, all lines are tokenized before any line is parsed, so a syntax
  * error on a later line is reported ahead of an instruction error on an earlier one.
  */
-export function parseProgram(source: string): Program {
+export function parseProgram(source: string, mode: Mode = 'zybooks'): Program {
   const lines = source.split(/\r\n|\r|\n/).map((text, i) => tokenizeLine(text, i + 1));
 
   const instructions: Instruction[] = [];
@@ -168,7 +230,7 @@ export function parseProgram(source: string): Program {
         labelLines.set(name, line);
         pending.push(name);
       } else if (tok.kind === 'word') {
-        instructions.push(buildInstruction(tok.text, tokens.slice(t + 1), line));
+        instructions.push(buildInstruction(tok.text, tokens.slice(t + 1), line, mode));
         for (const name of pending.splice(0)) labels.set(name, instructions.length - 1);
         break;
       } else {

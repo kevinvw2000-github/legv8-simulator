@@ -1,19 +1,26 @@
-import { HELP, instructionsFor, rangeFor, syntaxFor, UNSUPPORTED } from '../../src/core/help';
-import { MNEMONIC_FORMAT } from '../../src/core/isa';
+import { HELP, instructionsFor, rangeFor, registerNotesFor, rulesFor, syntaxFor, UNSUPPORTED } from '../../src/core/help';
+import { EXTRA_MNEMONIC_FORMAT, MNEMONIC_FORMAT, PSEUDO_OPS } from '../../src/core/isa';
 import { Machine } from '../../src/core/machine';
 import { parseProgram } from '../../src/core/parser';
 import type { Mode } from '../../src/core/state';
 
 describe('Help content', () => {
   it('covers exactly the instructions the parser accepts', () => {
-    expect(Object.keys(HELP).sort()).toEqual(Object.keys(MNEMONIC_FORMAT).sort());
-    expect(Object.keys(HELP)).toHaveLength(47);
+    // zyBooks' 47, plus what only Full LEGv8 mode accepts.
+    const accepted = [...Object.keys(MNEMONIC_FORMAT), ...Object.keys(EXTRA_MNEMONIC_FORMAT), ...PSEUDO_OPS];
+    expect(Object.keys(HELP).sort()).toEqual(accepted.sort());
+    expect(Object.keys(MNEMONIC_FORMAT)).toHaveLength(47);
+    expect(Object.keys(HELP)).toHaveLength(55);
   });
 
   it('has an example for every instruction that the parser accepts', () => {
     for (const [op, entry] of Object.entries(HELP)) {
       expect(entry.example.split(/[ ,]/)[0], op).toBe(op);
-      expect(() => parseProgram(`Loop:\n${entry.example}`), entry.example).not.toThrow();
+      const mode = entry.modes ? 'full' : 'zybooks';
+      expect(() => parseProgram(`Loop:\n${entry.example}`, mode), entry.example).not.toThrow();
+      expect(() => parseProgram(`Loop:\n${entry.example}`, 'full'), entry.example).not.toThrow();
+      // Full-only entries are exactly the ones the other modes reject.
+      if (entry.modes) expect(() => parseProgram(`Loop:\n${entry.example}`, 'zybooks'), entry.example).toThrow();
     }
   });
 
@@ -48,13 +55,48 @@ describe('Help content', () => {
     }
   });
 
-  it('returns every instruction in grouped order for both modes', () => {
+  it('returns every instruction in grouped order for each mode', () => {
     for (const mode of ['zybooks', 'arm'] as Mode[]) {
       const items = instructionsFor(mode);
       expect(items).toHaveLength(47);
       expect(items[0]!.group).toBe('Arithmetic');
       expect(items[items.length - 1]!.op).toBe('MOVK');
     }
+    const full = instructionsFor('full');
+    expect(full).toHaveLength(55);
+    expect(full.filter((i) => i.modes).map((i) => i.op).sort()).toEqual(
+      ['ANDIS', 'ANDS', 'CMP', 'CMPI', 'MOV', 'SMULH', 'UDIV', 'UMULH'],
+    );
+  });
+
+  it('explains each shorthand with the real instruction it becomes', () => {
+    expect(HELP.CMP!.alias).toBe('SUBS XZR, Xn, Xm');
+    expect(HELP.CMPI!.alias).toBe('SUBIS XZR, Xn, #imm');
+    expect(HELP.MOV!.alias).toContain('ADD Xd, Xn, XZR');
+    // What the alias says is what the parser really produces.
+    const op = (src: string) => parseProgram(src, 'full').instructions[0]!.op;
+    expect([op('CMP X1, X2'), op('CMPI X1, #5'), op('MOV X1, X2')]).toEqual(['SUBS', 'SUBIS', 'ADD']);
+  });
+
+  it('shows the wider ranges and the shorthand syntax in Full LEGv8 mode', () => {
+    expect(rangeFor('ADDI', 'full')).toBe('imm: -1024 to 4095');
+    expect(rangeFor('MOVK', 'full')).toBe('imm: -32768 to 65535; shift: 0, 16, 32, 48 (no #)');
+    expect(rangeFor('LDUR', 'full')).toBe('offset: -256 to 255');
+    expect(rangeFor('CMPI', 'full')).toBe('imm: -1024 to 4095');
+    expect(syntaxFor('CMP')).toBe('CMP Xn, Xm');
+    expect(syntaxFor('ANDS')).toBe('ANDS Xd, Xn, Xm');
+    expect(syntaxFor('ANDIS')).toBe('ANDIS Xd, Xn, #imm');
+    expect(rulesFor('full')[0]).toContain('SP, FP, LR');
+    expect(registerNotesFor('full').join(' ')).toContain('SP = X28');
+  });
+
+  it('marks what Full LEGv8 accepts in the Not-supported table', () => {
+    const full = UNSUPPORTED.filter((u) => u.inFull).map((u) => u.what.split(/[ ,]/)[0]);
+    expect(full).toEqual(expect.arrayContaining(['CMP', 'CMPI', 'MOV', 'ANDS', 'ANDIS', 'UDIV', 'SMULH', 'SP']));
+    expect(UNSUPPORTED.filter((u) => !u.inFull).map((u) => u.what)).toEqual([
+      'LDXR, STXR',
+      'Floating point (FADD, LDURS, …)',
+    ]);
   });
 
   it('suggests only rewrites made of instructions the simulator accepts', () => {

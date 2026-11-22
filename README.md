@@ -2,7 +2,8 @@
 
 A browser-based simulator for the LEGv8 teaching subset of ARMv8, with a debugger-style interface. It runs
 programs the same way as the zyBooks LEGv8 simulator, producing the same register and memory results and the
-same error messages. An optional ARM-accurate mode fixes zyBooks' known quirks.
+same error messages. An optional ARM-accurate mode fixes zyBooks' known quirks, and a Full LEGv8 mode adds the
+textbook instructions zyBooks doesn't have.
 
 This is an independent project. It isn't affiliated with or endorsed by zyBooks, Wiley, Elsevier or Arm.
 
@@ -73,12 +74,31 @@ your course's rules before sharing graded work.
 
 **Help** (top bar) lists every instruction the simulator accepts, grouped, with its syntax, a one-line meaning,
 its number ranges and whether it sets or reads the flags. Search narrows the list, and **Insert** adds an example
-line to your code. It follows the **Semantics** setting: the few instructions that behave differently in
+line to your code. It follows the **Compatibility** setting: the few instructions that behave differently in
 zyBooks-compatible and ARM-accurate mode (the flag-setting instructions, `SDIV`, `MOVZ`/`MOVK`) carry a note for
-the selected mode, and **Show how the other mode differs** adds the other one. Help also covers the syntax rules,
-registers, LEGv8 textbook instructions zyBooks doesn't accept (with what to write instead, such as `CMP` →
-`SUBS XZR, …`) and the keyboard shortcuts. The instruction list is built from the same tables the parser uses, and
-tests check that it can't drift from what the simulator accepts.
+the selected mode, and **Show how the other mode differs** adds the other one. In Full LEGv8 mode the extra
+instructions appear too, marked "Full LEGv8 only". Help also covers the syntax rules, registers, LEGv8 textbook
+instructions that aren't available (with what to write instead, such as `CMP` → `SUBS XZR, …`) and the keyboard
+shortcuts. The instruction list is built from the same tables the parser uses, and tests check that it can't drift
+from what the simulator accepts.
+
+**Compatibility** (top bar) chooses what the simulator accepts and how it behaves:
+
+| Choice | Instructions | Behavior | Runs in zyBooks? |
+|---|---|---|---|
+| **zyBooks-compatible** (default) | zyBooks' 47 | Exactly like zyBooks, quirks included | Yes |
+| **ARM-accurate** | zyBooks' 47 | Real ARM where zyBooks differs | Yes, but a few results can differ |
+| **Full LEGv8** | zyBooks' 47 plus the textbook extras | Real ARM | Not if you use the extras |
+
+Full LEGv8 adds `CMP`, `CMPI` and `MOV` (shorthands that expand to `SUBS XZR, …`, `SUBIS XZR, …` and `ADD`/`ADDI`/
+`MOVZ`), the register names `SP`, `FP`, `LR`, `IP0` and `IP1`, `ANDS`, `ANDIS`, `UDIV`, `SMULH` and `UMULH`, and the
+textbook's larger numbers (immediates up to 4095, `MOVZ`/`MOVK` pieces up to 65535). Floating point and
+`LDXR`/`STXR` aren't included. While Full LEGv8 is selected a **Not zyBooks-compatible** tag shows in the top bar,
+and **Export** and **Copy** warn about lines zyBooks would reject. **Convert to zyBooks** rewrites what it can
+(`CMP X1, X2` becomes `SUBS XZR, X1, X2`, `SP` becomes `X28`, and so on), keeps your lines, comments and breakpoints
+where they are, lists anything that has no zyBooks equivalent, and switches to zyBooks-compatible when nothing is
+left over (Ctrl+Z in the editor undoes the rewrite). In the other two modes, using one of the extras gives the usual
+error plus a hint about what to write instead.
 
 **Register hover:** while simulating, rest the pointer on a register in your code (`X5`, `XZR`, …) to see its
 current value in decimal, unsigned, hex and binary, with your chosen format emphasized. `X28` is labeled as the
@@ -124,7 +144,7 @@ Your code, starting values, breakpoints, speed and mode are saved in this browse
 
 The default **zyBooks-compatible** mode reproduces these behaviors of the zyBooks simulator, each confirmed against it
 (details in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)).
-**ARM-accurate** mode (Semantics menu) gives real hardware results instead.
+**ARM-accurate** mode (Compatibility menu) gives real hardware results instead.
 
 | Behavior | zyBooks-compatible | ARM-accurate |
 |---|---|---|

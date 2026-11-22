@@ -4,11 +4,12 @@
 import {
   HELP_GROUPS,
   MODE_INFO,
-  REGISTER_NOTES,
-  RULES,
   SHORTCUTS,
   UNSUPPORTED,
+  behaviorOf,
   instructionsFor,
+  registerNotesFor,
+  rulesFor,
   type HelpItem,
 } from '../core/help';
 import type { Mode } from '../core/state';
@@ -45,10 +46,11 @@ export class HelpPanel {
         <button type="button" class="ghost icon" data-close aria-label="Close help">×</button>
       </div>
       <div class="help-controls">
-        <label class="help-mode">Semantics
-          <select aria-label="Semantics mode">
+        <label class="help-mode">Compatibility
+          <select aria-label="Compatibility mode">
             <option value="zybooks">${MODE_INFO.zybooks.name}</option>
             <option value="arm">${MODE_INFO.arm.name}</option>
+            <option value="full">${MODE_INFO.full.name}</option>
           </select>
         </label>
         <label class="help-other"><input type="checkbox"> Show how the other mode differs</label>
@@ -94,7 +96,9 @@ export class HelpPanel {
 
   private render(): void {
     const { mode, simulating } = this.state;
-    const other: Mode = mode === 'zybooks' ? 'arm' : 'zybooks';
+    // Full LEGv8 behaves like ARM-accurate, so its notes are the "real ARM" ones.
+    const behave = behaviorOf(mode);
+    const other: Mode = behave === 'zybooks' ? 'arm' : 'zybooks';
     const select = this.dialog.querySelector('select') as HTMLSelectElement;
     select.value = mode;
     select.disabled = simulating;
@@ -113,7 +117,7 @@ export class HelpPanel {
       section.dataset.group = group;
       section.append(el('h3', undefined, group));
       const list = el('ul', 'help-list');
-      for (const item of rows) list.append(this.item(item, mode, other, simulating));
+      for (const item of rows) list.append(this.item(item, behave, other, simulating));
       section.append(list);
       parts.push(section);
     }
@@ -121,9 +125,9 @@ export class HelpPanel {
     (parts[parts.length - 1] as HTMLElement).hidden = true;
 
     parts.push(
-      this.details('Syntax rules', RULES),
-      this.details('Registers', REGISTER_NOTES),
-      this.unsupported(),
+      this.details('Syntax rules', rulesFor(mode)),
+      this.details('Registers', registerNotesFor(mode)),
+      this.unsupported(mode),
       this.shortcuts(),
     );
     this.body.replaceChildren(...parts);
@@ -139,6 +143,7 @@ export class HelpPanel {
     const syntax = el('code', 'help-syntax');
     syntax.append(el('strong', undefined, item.op), item.syntax.slice(item.op.length));
     head.append(syntax);
+    if (item.modes) head.append(el('span', 'help-chip help-chip-full', 'Full LEGv8 only'));
     if (item.setsFlags) head.append(el('span', 'help-chip', 'sets flags'));
     if (item.readsFlags) head.append(el('span', 'help-chip', 'reads flags'));
     if (!simulating) {
@@ -152,6 +157,7 @@ export class HelpPanel {
       head.append(insert);
     }
     li.append(head, el('p', 'help-meaning', item.meaning));
+    if (item.alias) li.append(el('p', 'help-range', `= ${item.alias}`));
     if (item.range) li.append(el('p', 'help-range', item.range));
 
     const note = item.modeNote?.[mode];
@@ -174,19 +180,29 @@ export class HelpPanel {
     return d;
   }
 
-  private unsupported(): HTMLElement {
+  private unsupported(mode: Mode): HTMLElement {
+    const full = mode === 'full';
     const d = el('details', 'help-details');
-    d.append(el('summary', undefined, 'Not supported (and what to write instead)'));
+    d.append(el('summary', undefined, full ? 'Not supported in any mode' : 'Not supported (and what to write instead)'));
     d.append(
-      el('p', 'help-lead', 'These appear in the LEGv8 textbook, but zyBooks doesn’t accept them, so neither does this simulator.'),
+      el(
+        'p',
+        'help-lead',
+        full
+          ? 'These appear in the LEGv8 textbook but aren’t available here, even in Full LEGv8.'
+          : 'These appear in the LEGv8 textbook, but zyBooks doesn’t accept them, so neither does this mode. Full LEGv8 accepts the ones marked ✓.',
+      ),
     );
     const table = el('table', 'help-table');
-    table.innerHTML = '<thead><tr><th scope="col">Instead of</th><th scope="col">Write</th></tr></thead>';
+    table.innerHTML = `<thead><tr><th scope="col">Instead of</th><th scope="col">Write</th>${
+      full ? '' : '<th scope="col">Full LEGv8</th>'
+    }</tr></thead>`;
     const tbody = el('tbody');
-    for (const u of UNSUPPORTED) {
+    for (const u of UNSUPPORTED.filter((x) => !full || !x.inFull)) {
       const tr = el('tr');
       tr.append(el('td', undefined, u.what), el('td', undefined, u.instead));
       for (const td of tr.children) td.classList.add('mono');
+      if (!full) tr.append(el('td', 'help-full-col', u.inFull ? '✓' : '—'));
       tbody.append(tr);
     }
     table.append(tbody);

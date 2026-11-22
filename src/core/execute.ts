@@ -35,6 +35,11 @@ function subFlags(a: bigint, b: bigint): Flags {
   };
 }
 
+/** Flags after ANDS/ANDIS: N and Z from the result; C and V are cleared. */
+function logicFlags(r: bigint): Flags {
+  return { N: isNeg(r), Z: r === 0n, C: false, V: false };
+}
+
 /**
  * zyBooks SUBIS carry: the immediate (signed) is compared to the register value with a
  * signed-style test. imm < 0 → C = 1; imm = value → C = 1; otherwise C = bit 63 of (imm − value).
@@ -120,9 +125,18 @@ export function execute(ins: Instruction, pc: number, st: MachineState, program:
         case 'EOR': r = a ^ b; break;
         case 'MUL': r = a * b; break;
         case 'SDIV': r = sdiv(a, b, st.mode); break;
+        // Full LEGv8 only (the parser rejects these in the other modes).
+        case 'ANDS': r = a & b; break;
+        case 'UDIV':
+          if (b === 0n) throw new ExecError('division by zero');
+          r = a / b; // registers hold unsigned values, so this is an unsigned divide
+          break;
+        case 'SMULH': r = (s64(a) * s64(b)) >> 64n; break; // high half of the signed product
+        case 'UMULH': r = (a * b) >> 64n; break;
         default: throw new ExecError(`Unsupported instruction: ${ins.op}`);
       }
       st.writeReg(ins.rd, r);
+      if (ins.op === 'ANDS') st.flags = logicFlags(u64(r));
       if (ins.op === 'ADDS' || ins.op === 'SUBS') {
         const [fa, fb] = zy ? [st.readReg(ins.rn), st.readReg(ins.rm)] : [a, b];
         st.flags = ins.op === 'ADDS' ? addFlags(fa, fb) : subFlags(fa, fb);
@@ -142,11 +156,13 @@ export function execute(ins: Instruction, pc: number, st: MachineState, program:
         case 'ANDI': r = a & imm; break;
         case 'ORRI': r = a | imm; break;
         case 'EORI': r = a ^ imm; break;
+        case 'ANDIS': r = a & imm; break;
         case 'LSL': r = a << shift; break;
         case 'LSR': r = a >> shift; break;
         default: throw new ExecError(`Unsupported instruction: ${ins.op}`);
       }
       st.writeReg(ins.rd, r);
+      if (ins.op === 'ANDIS') st.flags = logicFlags(u64(r));
       if (ins.op === 'ADDIS') {
         st.flags = addFlags(zy ? st.readReg(ins.rn) : a, imm);
       } else if (ins.op === 'SUBIS') {

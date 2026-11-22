@@ -43,7 +43,7 @@ test('follows the compatibility mode, and can change it', async ({ page }) => {
   await expect(item(page, 'SDIV').locator('.help-note')).toHaveCount(2);
   await expect(item(page, 'SDIV').locator('.help-note-other')).toContainText('ARM-accurate: Real ARM');
 
-  await dialog(page).getByLabel('Semantics mode').selectOption('arm');
+  await dialog(page).getByLabel('Compatibility mode').selectOption('arm');
   await expect(page.locator('.help-mode-info')).toContainText('follow real ARM hardware');
   await expect(item(page, 'SDIV').locator('.help-note').first()).toContainText('Real ARM');
   await expect(item(page, 'SDIV').locator('.help-note-other')).toContainText('zyBooks-compatible: zyBooks quirk');
@@ -51,13 +51,13 @@ test('follows the compatibility mode, and can change it', async ({ page }) => {
   // The top-bar choice is remembered, and Help reflects it next time.
   await page.reload();
   await open(page);
-  await expect(dialog(page).getByLabel('Semantics mode')).toHaveValue('arm');
+  await expect(dialog(page).getByLabel('Compatibility mode')).toHaveValue('arm');
 });
 
 test('the top-bar mode is reflected when Help opens', async ({ page }) => {
   await page.locator('#mode').selectOption('arm');
   await open(page);
-  await expect(dialog(page).getByLabel('Semantics mode')).toHaveValue('arm');
+  await expect(dialog(page).getByLabel('Compatibility mode')).toHaveValue('arm');
 });
 
 test('Insert adds the example line to the code and closes Help', async ({ page }) => {
@@ -73,7 +73,7 @@ test('while simulating: no Insert, the mode is locked, and keys do not reach the
   await page.getByRole('button', { name: 'Enter simulation' }).click();
   await open(page);
   await expect(page.locator('.help-insert')).toHaveCount(0);
-  await expect(dialog(page).getByLabel('Semantics mode')).toBeDisabled();
+  await expect(dialog(page).getByLabel('Compatibility mode')).toBeDisabled();
   await expect(page.locator('.help-mode-info')).toContainText('can’t be changed while simulating');
   await page.keyboard.press('F10');
   await page.keyboard.press('Escape');

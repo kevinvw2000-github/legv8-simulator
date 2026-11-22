@@ -128,7 +128,7 @@ export class Machine {
 export function runProgram(source: string, initial: Storage, options: RunOptions = {}): RunResult {
   let machine: Machine;
   try {
-    machine = new Machine(parseProgram(source), initial, options.mode);
+    machine = new Machine(parseProgram(source, options.mode), initial, options.mode);
     machine.historyLimit = 0; // No Step back needed when running straight through.
   } catch (e) {
     if (e instanceof ParseError) return { kind: 'parseError', message: e.display };

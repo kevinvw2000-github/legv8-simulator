@@ -3,7 +3,7 @@
 import { Machine, RuntimeError } from '../core/machine';
 import { ParseError, parseProgram } from '../core/parser';
 import { s64, VALUE_FORMATS, type ValueFormat } from '../core/bits';
-import type { Mode } from '../core/state';
+import { MODES, type Mode } from '../core/state';
 import { exportWorkspace, importWorkspace } from '../core/stateIO';
 import { callStackView, stackView } from '../core/calls';
 import { CallsPanel } from './callsPanel';
@@ -15,6 +15,7 @@ import { WatchPanel } from './watchPanel';
 import { ExpectedPanel, NO_EXPECTED, type ExpectedSettings } from './expectedPanel';
 import { HelpPanel } from './helpPanel';
 import { simulationHover, type HoverContext } from './hover';
+import { convertToZyBooks, findFullOnly, parseHint } from '../core/fullmode';
 import { checkExpected, keyOrder, summarize, type CheckResult, type ExpectedKind } from '../core/expected';
 import { formatValue } from '../core/bits';
 import type { ViewRow } from './storagePanel';
@@ -89,7 +90,7 @@ function load(): Saved {
       registers: Array.isArray(s.registers) ? s.registers : DEFAULT.registers,
       memory: Array.isArray(s.memory) ? s.memory : DEFAULT.memory,
       speed: s.speed && s.speed in SPEEDS ? s.speed : DEFAULT.speed,
-      mode: s.mode === 'arm' ? 'arm' : 'zybooks',
+      mode: MODES.includes(s.mode as Mode) ? (s.mode as Mode) : 'zybooks',
       format: VALUE_FORMATS.includes(s.format as ValueFormat) ? (s.format as ValueFormat) : DEFAULT.format,
       breakpoints: Array.isArray(s.breakpoints) ? s.breakpoints.filter(Number.isInteger) : [],
       watches: sanitizeWatches(s.watches),
@@ -133,6 +134,8 @@ export class App {
     pause: HTMLButtonElement;
     speed: HTMLSelectElement;
     mode: HTMLSelectElement;
+    modeBadge: HTMLElement;
+    convert: HTMLButtonElement;
     clearBps: HTMLButtonElement;
     ioText: HTMLTextAreaElement;
     ioButtons: HTMLButtonElement[];
@@ -155,6 +158,8 @@ export class App {
       pause: $(root, '#pause'),
       speed: $(root, '#speed'),
       mode: $(root, '#mode'),
+      modeBadge: $(root, '#mode-badge'),
+      convert: $(root, '#convert'),
       clearBps: $(root, '#clear-bps'),
       ioText: $(root, '#io-text'),
       ioButtons: [...root.querySelectorAll<HTMLButtonElement>('.io button')],
@@ -227,6 +232,7 @@ export class App {
       }
     });
     this.els.mode.addEventListener('change', () => this.setMode(this.els.mode.value as Mode));
+    this.els.convert.addEventListener('click', () => this.convertForZyBooks());
     $<HTMLButtonElement>(root, '#help-btn').addEventListener('click', () =>
       this.help.open({ mode: this.saved.mode, simulating: this.machine !== null }),
     );
@@ -276,7 +282,40 @@ export class App {
     this.saved.mode = mode;
     this.els.mode.value = mode;
     this.save();
+    this.render();
     if (this.help.isOpen()) this.help.update({ mode, simulating: this.machine !== null });
+  }
+
+  /** Rewrite Full LEGv8 code so zyBooks accepts it, and switch to zyBooks mode if nothing is left over. */
+  private convertForZyBooks(): void {
+    if (this.machine) return;
+    const result = convertToZyBooks(this.editor.getCode());
+    if (result.changed > 0) this.editor.setCode(result.code); // the editor's own undo (Ctrl+Z) reverts it
+    const lines = `${result.changed} line${result.changed === 1 ? '' : 's'}`;
+    if (result.issues.length === 0) {
+      this.setMode('zybooks');
+      this.log(
+        result.changed === 0
+          ? 'Nothing needed converting. Switched to zyBooks-compatible.'
+          : `Converted ${lines} and switched to zyBooks-compatible. Click in the code and press Ctrl+Z to undo the conversion.`,
+        'ok',
+      );
+      return;
+    }
+    this.log(
+      `Converted ${lines}. zyBooks still won't accept:\n` + result.issues.map((i) => `Line ${i.line}: ${i.reason}`).join('\n'),
+      'error',
+    );
+  }
+
+  /** A warning for Export/Copy when Full LEGv8 code uses things zyBooks rejects; empty otherwise. */
+  private zybooksWarning(): string {
+    if (this.saved.mode !== 'full') return '';
+    const uses = findFullOnly(this.saved.code);
+    if (uses.length === 0) return '';
+    const shown = uses.slice(0, 4).map((u) => `line ${u.line} (${u.what})`).join(', ');
+    const more = uses.length > 4 ? ` and ${uses.length - 4} more` : '';
+    return `\nHeads up: zyBooks won't accept ${shown}${more}. Use Convert to zyBooks first.`;
   }
 
   // ---------- share links ----------
@@ -346,14 +385,19 @@ export class App {
     const { code, registers, memory } = this.saved;
     this.els.ioText.value = exportWorkspace({ code, registers, memory });
     this.els.ioText.select();
-    this.log('Exported. Paste this into zyBooks (More options → Import) or keep it to import later.', 'ok');
+    const warning = this.zybooksWarning();
+    this.log(
+      'Exported. Paste this into zyBooks (More options → Import) or keep it to import later.' + warning,
+      warning ? '' : 'ok',
+    );
   }
 
   private async copyExport(): Promise<void> {
     if (!this.els.ioText.value) this.exportToText();
     try {
       await navigator.clipboard.writeText(this.els.ioText.value);
-      this.log('Copied to clipboard.', 'ok');
+      const warning = this.zybooksWarning();
+      this.log('Copied to clipboard.' + warning, warning ? '' : 'ok');
     } catch {
       this.els.ioText.select();
       this.log('Clipboard unavailable. The text is selected; press Ctrl+C to copy.');
@@ -475,10 +519,10 @@ export class App {
     }
     let program;
     try {
-      program = parseProgram(this.editor.getCode());
+      program = parseProgram(this.editor.getCode(), this.saved.mode);
     } catch (e) {
       if (!(e instanceof ParseError)) throw e;
-      this.log(e.display, 'error');
+      this.log(e.display + parseHint(this.editor.getCode(), e.line, this.saved.mode), 'error');
       this.editor.setErrorLine(e.line);
       return;
     }
@@ -683,6 +727,9 @@ export class App {
     back.disabled = !sim || this.running || m.historyLength === 0;
     run.disabled = !sim || this.stopped;
     mode.disabled = sim;
+    this.els.modeBadge.hidden = this.saved.mode !== 'full';
+    this.els.convert.hidden = this.saved.mode !== 'full';
+    this.els.convert.disabled = sim;
     speed.disabled = false;
     for (const b of this.els.ioButtons) b.disabled = sim;
 
@@ -808,12 +855,17 @@ const TEMPLATE = `
     <button id="help-btn" type="button" title="Instruction set, syntax rules and what zyBooks supports">Help</button>
     <button id="share" type="button" title="Copy a link that opens this program, its starting values, watches and breakpoints">Share link</button>
   </div>
-  <label class="mode">Semantics
-    <select id="mode" title="zyBooks reproduces the zyBooks simulator exactly, including its quirks">
-      <option value="zybooks">zyBooks-compatible</option>
-      <option value="arm">ARM-accurate</option>
-    </select>
-  </label>
+  <div class="mode-wrap">
+    <label class="mode">Compatibility
+      <select id="mode" title="zyBooks-compatible reproduces the zyBooks simulator exactly, including its quirks. ARM-accurate has the same instructions with real ARM behavior. Full LEGv8 also accepts textbook instructions zyBooks doesn't.">
+        <option value="zybooks">zyBooks-compatible</option>
+        <option value="arm">ARM-accurate</option>
+        <option value="full">Full LEGv8</option>
+      </select>
+    </label>
+    <span id="mode-badge" class="mode-badge" hidden title="This mode accepts instructions zyBooks doesn't, so the code may not run there">Not zyBooks-compatible</span>
+    <button id="convert" type="button" class="ghost" hidden title="Rewrite this code so zyBooks accepts it (CMP, MOV, SP and so on)">Convert to zyBooks</button>
+  </div>
 </header>
 <div class="shared-banner" role="region" aria-label="Shared program">
   <p>You're viewing a shared program. Your own program is safe; <strong>Keep it</strong> replaces it with this one.</p>

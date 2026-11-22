@@ -2,7 +2,7 @@
 // fragment to the server, so nothing is uploaded.
 
 import { parseWatch, type WatchSpec } from './watch';
-import type { Mode } from './state';
+import { MODES, type Mode } from './state';
 
 export interface SharedWorkspace {
   code: string;
@@ -87,7 +87,7 @@ function sanitize(data: unknown): SharedWorkspace {
     memory: entries(d.memory),
     watches: sanitizeWatches(d.watches),
     breakpoints: Array.isArray(d.breakpoints) ? d.breakpoints.filter((n) => Number.isInteger(n) && n > 0) : [],
-    mode: d.mode === 'arm' ? 'arm' : 'zybooks',
+    mode: MODES.includes(d.mode as Mode) ? (d.mode as Mode) : 'zybooks',
     expected: sanitizeExpected(d.expected),
   };
 }

@@ -81,6 +81,24 @@ These differ from real ARM hardware. The zyBooks-compatible mode reproduces them
 
 Both modes keep only the low 6 bits of a shift amount (`LSL #64` acts like `#0`).
 
+## Full LEGv8 mode (not zyBooks behavior)
+
+Full LEGv8 mode is an extension. zyBooks has nothing to compare these against, so they follow the textbook and
+ARM definitions instead of anything observed in zyBooks, and code that uses them is not expected to run there.
+Everything else in this mode behaves like ARM-accurate mode.
+
+- **Shorthands** are expanded when the program is read: `CMP Xn, Xm` is `SUBS XZR, Xn, Xm`; `CMPI Xn, #imm` is
+  `SUBIS XZR, Xn, #imm`; `MOV Xd, Xn` is `ADD Xd, Xn, XZR`; `MOV Xd, #imm` is `ADDI Xd, XZR, #imm`, or
+  `MOVZ Xd, imm, LSL 0` when the number is above 4095. Runtime error messages show the expanded instruction.
+- **Register names:** `SP` = X28, `FP` = X29, `LR` = X30, `IP0` = X16, `IP1` = X17, wherever a register is
+  expected. A label with one of those names still works as a label.
+- **ANDS, ANDIS:** AND, then set N and Z from the result and clear C and V.
+- **UDIV:** unsigned divide, rounded down. Division by zero is the same error as SDIV (real ARM returns 0).
+- **SMULH, UMULH:** the high 64 bits of the signed or unsigned 128-bit product.
+- **Number ranges:** I-format immediates −1024 to 4095 (zyBooks: −1024 to 1023); MOVZ/MOVK −32768 to 65535
+  (zyBooks: −32768 to 32767). Load/store offsets and shift amounts are unchanged.
+- Not included: floating point, `LDXR`/`STXR`, `LDA`.
+
 ## Interactive checks
 
 Each of these was run in the zyBooks simulator on 2026-11-05 and is replayed by

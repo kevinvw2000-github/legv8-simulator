@@ -2,8 +2,20 @@
 // tables (isa.ts), and a test checks that every instruction the parser accepts has an entry here,
 // so Help can't list something the simulator rejects (or miss something it accepts).
 
-import { IMMEDIATE_BITS, MNEMONIC_FORMAT, MOV_SHIFTS, signedRange, type Format } from './isa';
+import { INSTEAD } from './fullmode';
+import {
+  EXTRA_MNEMONIC_FORMAT,
+  FULL_RANGES,
+  IMMEDIATE_BITS,
+  MNEMONIC_FORMAT,
+  MOV_SHIFTS,
+  signedRange,
+  type Format,
+} from './isa';
 import type { Mode } from './state';
+
+/** The modes' behavior comes in two flavors: zyBooks' quirks, or real ARM (also used by Full LEGv8). */
+export const behaviorOf = (mode: Mode): 'zybooks' | 'arm' => (mode === 'zybooks' ? 'zybooks' : 'arm');
 
 export type HelpGroup = 'Arithmetic' | 'Logic and shifts' | 'Load and store' | 'Branches' | 'Move';
 export const HELP_GROUPS: readonly HelpGroup[] = ['Arithmetic', 'Logic and shifts', 'Load and store', 'Branches', 'Move'];
@@ -22,7 +34,11 @@ export interface HelpEntry {
   modeNote?: Partial<Record<Mode, string>>;
   /** Modes that include the instruction (all of them when omitted). */
   modes?: readonly Mode[];
+  /** For shorthands: the real instruction(s) they stand for. */
+  alias?: string;
 }
+
+const FULL_ONLY: readonly Mode[] = ['full'];
 
 const FLAGS_AFTER: Partial<Record<Mode, string>> = {
   zybooks:
@@ -102,6 +118,43 @@ export const HELP: Readonly<Record<string, HelpEntry>> = {
   'B.GT': { group: 'Branches', meaning: 'Jump if signed greater than, > (Z = 0 and N = V)', example: 'B.GT Loop', readsFlags: true },
   'B.LE': { group: 'Branches', meaning: 'Jump if signed less or equal, ≤ (Z = 1 or N ≠ V)', example: 'B.LE Loop', readsFlags: true },
 
+  // ---- Full LEGv8 only: textbook instructions zyBooks doesn't have ----
+  CMP: {
+    group: 'Arithmetic', modes: FULL_ONLY, setsFlags: true, example: 'CMP X1, X2',
+    meaning: 'Compare two registers: set the flags from Xn − Xm and throw the result away',
+    alias: INSTEAD.CMP,
+  },
+  CMPI: {
+    group: 'Arithmetic', modes: FULL_ONLY, setsFlags: true, example: 'CMPI X1, #5',
+    meaning: 'Compare a register with a number: set the flags from Xn − imm and throw the result away',
+    alias: INSTEAD.CMPI,
+  },
+  ANDS: {
+    group: 'Logic and shifts', modes: FULL_ONLY, setsFlags: true, example: 'ANDS X1, X2, X3',
+    meaning: 'Xd = Xn AND Xm, and set the flags (N and Z from the result; C and V cleared)',
+  },
+  ANDIS: {
+    group: 'Logic and shifts', modes: FULL_ONLY, setsFlags: true, example: 'ANDIS X1, X2, #255',
+    meaning: 'Xd = Xn AND imm, and set the flags (N and Z from the result; C and V cleared)',
+  },
+  UDIV: {
+    group: 'Arithmetic', modes: FULL_ONLY, example: 'UDIV X1, X2, X3',
+    meaning: 'Xd = Xn ÷ Xm, unsigned, rounded down. Dividing by zero stops the program with an error.',
+  },
+  SMULH: {
+    group: 'Arithmetic', modes: FULL_ONLY, example: 'SMULH X1, X2, X3',
+    meaning: 'Xd = the high 64 bits of the signed 128-bit product Xn × Xm (MUL gives the low 64 bits)',
+  },
+  UMULH: {
+    group: 'Arithmetic', modes: FULL_ONLY, example: 'UMULH X1, X2, X3',
+    meaning: 'Xd = the high 64 bits of the unsigned 128-bit product Xn × Xm',
+  },
+  MOV: {
+    group: 'Move', modes: FULL_ONLY, example: 'MOV X1, X2',
+    meaning: 'Copy a register into Xd, or put a number from -1024 to 65535 in it',
+    alias: 'ADD Xd, Xn, XZR, or ADDI Xd, XZR, #imm (MOVZ for numbers above 4095)',
+  },
+
   MOVZ: {
     group: 'Move',
     meaning: 'Xd = a 16-bit number placed at bit position 0, 16, 32 or 48, with all other bits 0',
@@ -123,8 +176,15 @@ export const HELP: Readonly<Record<string, HelpEntry>> = {
 };
 
 /** Syntax for an instruction, built from the parser's operand format. */
+const PSEUDO_SYNTAX: Readonly<Record<string, string>> = {
+  CMP: 'CMP Xn, Xm',
+  CMPI: 'CMPI Xn, #imm',
+  MOV: 'MOV Xd, Xn  or  MOV Xd, #imm',
+};
+
 export function syntaxFor(op: string): string {
-  const format = MNEMONIC_FORMAT[op] as Format;
+  if (Object.hasOwn(PSEUDO_SYNTAX, op)) return PSEUDO_SYNTAX[op]!;
+  const format = (MNEMONIC_FORMAT[op] ?? EXTRA_MNEMONIC_FORMAT[op]) as Format;
   const shift = op === 'LSL' || op === 'LSR';
   switch (format) {
     case 'R':
@@ -145,19 +205,24 @@ export function syntaxFor(op: string): string {
 }
 
 /** Allowed numbers for an instruction's constant, or null when it has none. */
-export function rangeFor(op: string): string | null {
-  const format = MNEMONIC_FORMAT[op] as Format;
-  const span = (bits: number) => {
-    const [lo, hi] = signedRange(bits);
+export function rangeFor(op: string, mode: Mode = 'zybooks'): string | null {
+  if (op === 'CMPI') return `imm: ${FULL_RANGES.I.join(' to ')}`;
+  if (Object.hasOwn(PSEUDO_SYNTAX, op)) return null;
+  const format = (MNEMONIC_FORMAT[op] ?? EXTRA_MNEMONIC_FORMAT[op]) as Format;
+  const full = mode === 'full';
+  const span = (bits: number, widest?: readonly [number, number]) => {
+    const [lo, hi] = widest ?? signedRange(bits);
     return `${lo} to ${hi}`;
   };
   switch (format) {
     case 'I':
-      return op === 'LSL' || op === 'LSR' ? 'shift: 0 to 63' : `imm: ${span(IMMEDIATE_BITS.I)}`;
+      return op === 'LSL' || op === 'LSR'
+        ? 'shift: 0 to 63'
+        : `imm: ${span(IMMEDIATE_BITS.I, full ? FULL_RANGES.I : undefined)}`;
     case 'D':
       return `offset: ${span(IMMEDIATE_BITS.D)}`;
     case 'IM':
-      return `imm: ${span(IMMEDIATE_BITS.IM)}; shift: ${MOV_SHIFTS.join(', ')} (no #)`;
+      return `imm: ${span(IMMEDIATE_BITS.IM, full ? FULL_RANGES.IM : undefined)}; shift: ${MOV_SHIFTS.join(', ')} (no #)`;
     default:
       return null;
   }
@@ -173,13 +238,20 @@ export interface HelpItem extends HelpEntry {
 export function instructionsFor(mode: Mode): HelpItem[] {
   const items = Object.entries(HELP)
     .filter(([, e]) => !e.modes || e.modes.includes(mode))
-    .map(([op, e]) => ({ ...e, op, syntax: syntaxFor(op), range: rangeFor(op) }));
+    .map(([op, e]) => ({ ...e, op, syntax: syntaxFor(op), range: rangeFor(op, mode) }));
   return HELP_GROUPS.flatMap((g) => items.filter((i) => i.group === g));
 }
 
 // ---------- the other sections ----------
 
 export const MODE_INFO: Readonly<Record<Mode, { name: string; text: string }>> = {
+  full: {
+    name: 'Full LEGv8',
+    text:
+      'Real-ARM behavior (like ARM-accurate), plus textbook extras zyBooks doesn’t accept: CMP, CMPI and MOV; ' +
+      'the names SP, FP, LR, IP0 and IP1; ANDS, ANDIS, UDIV, SMULH and UMULH; and larger numbers. Code that uses ' +
+      'them won’t run in zyBooks; Convert to zyBooks rewrites what it can.',
+  },
   zybooks: {
     name: 'zyBooks-compatible',
     text:
@@ -203,6 +275,26 @@ export const RULES: readonly string[] = [
   'Each instruction takes 4 bytes of instruction memory, starting at address 0. BL on instruction number i puts (i + 1) × 4 in X30.',
 ];
 
+/** Syntax rules for a mode (the zyBooks ones, adjusted where Full LEGv8 differs). */
+export function rulesFor(mode: Mode): readonly string[] {
+  if (mode !== 'full') return RULES;
+  return [
+    'Instruction names and registers are UPPERCASE. SP, FP, LR, IP0 and IP1 are accepted as X28, X29, X30, X16 and X17.',
+    'A # is required before numbers in the "imm" and "offset" positions. MOVZ and MOVK are the exception: no #. ADDI and the other immediate instructions take -1024 to 4095 (zyBooks stops at 1023).',
+    ...RULES.slice(2),
+  ];
+}
+
+export function registerNotesFor(mode: Mode): readonly string[] {
+  return mode !== 'full'
+    ? REGISTER_NOTES
+    : [
+        ...REGISTER_NOTES.slice(0, 1),
+        'Nicknames: SP = X28, FP = X29, LR = X30, IP0 = X16, IP1 = X17. They are replaced by the X register when the code is read.',
+        ...REGISTER_NOTES.slice(1),
+      ];
+}
+
 export const REGISTER_NOTES: readonly string[] = [
   'X0 to X30 are 64-bit registers. XZR always reads as 0, and writes to it are ignored.',
   'The LEGv8 convention (not enforced by the simulator): X0–X7 arguments and results, X9–X15 temporaries, X19–X27 saved across calls, X28 stack pointer, X29 frame pointer, X30 link register (return address).',
@@ -212,20 +304,23 @@ export const REGISTER_NOTES: readonly string[] = [
 export interface Unsupported {
   what: string;
   instead: string;
+  /** Full LEGv8 mode accepts it. */
+  inFull?: boolean;
 }
 
 /** Things from the LEGv8 textbook that zyBooks (and so this simulator) doesn't accept. */
 export const UNSUPPORTED: readonly Unsupported[] = [
-  { what: 'CMP Xn, Xm', instead: 'SUBS XZR, Xn, Xm' },
-  { what: 'CMPI Xn, #imm', instead: 'SUBIS XZR, Xn, #imm' },
-  { what: 'MOV Xd, Xn', instead: 'ADD Xd, Xn, XZR' },
-  { what: 'MOV Xd, #imm', instead: 'ADDI Xd, XZR, #imm' },
-  { what: 'ANDS, ANDIS', instead: 'AND or ANDI, then SUBIS XZR, Xd, #0 to set N and Z' },
-  { what: 'UDIV', instead: 'SDIV (same result for values from 0 up to 2^32 − 1)' },
-  { what: 'SMULH, UMULH', instead: 'nothing equivalent' },
+  { what: 'CMP Xn, Xm', instead: INSTEAD.CMP!, inFull: true },
+  { what: 'CMPI Xn, #imm', instead: INSTEAD.CMPI!, inFull: true },
+  { what: 'MOV Xd, Xn  or  MOV Xd, #imm', instead: INSTEAD.MOV!, inFull: true },
+  { what: 'ANDS', instead: INSTEAD.ANDS!, inFull: true },
+  { what: 'ANDIS', instead: INSTEAD.ANDIS!, inFull: true },
+  { what: 'UDIV', instead: INSTEAD.UDIV!, inFull: true },
+  { what: 'SMULH, UMULH', instead: 'nothing equivalent', inFull: true },
+  { what: 'ADDI and similar with a number above 1023', instead: 'MOVZ/MOVK, or several smaller steps', inFull: true },
   { what: 'LDXR, STXR', instead: 'LDUR and STUR (there is only one thread here)' },
   { what: 'Floating point (FADD, LDURS, …)', instead: 'nothing equivalent; there are no S or D registers' },
-  { what: 'SP, FP, LR, IP0, IP1', instead: 'X28, X29, X30, X16, X17' },
+  { what: 'SP, FP, LR, IP0, IP1', instead: 'X28, X29, X30, X16, X17', inFull: true },
 ];
 
 export const SHORTCUTS: ReadonlyArray<readonly [string, string]> = [
