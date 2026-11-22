@@ -29,7 +29,7 @@ export interface Example {
   watches: WatchSpec[];
   /** Expected-results fields (zyBooks pair format). */
   expected: { registers: string; memory: string };
-  /** 1-based source lines that start with a breakpoint. */
+  /** 1-based source lines that start with a breakpoint (counted without the "EXAMPLE" comment added on top). */
   breakpoints?: number[];
   /**
    * What running it does, so tests can check it:
@@ -43,7 +43,7 @@ const lines = (...l: string[]): string => l.join('\n');
 const reg = (key: string, value: string) => ({ key, value });
 const none = { registers: '', memory: '' };
 
-export const EXAMPLES: readonly Example[] = [
+const RAW: readonly Example[] = [
   {
     id: 'add',
     group: 'Basics',
@@ -399,3 +399,13 @@ export const EXAMPLES: readonly Example[] = [
     outcome: 'ok',
   },
 ];
+
+/** The first line of every example's code, so nobody mistakes sample code for their own work. */
+export const exampleHeader = (title: string): string => `// EXAMPLE: ${title}. Edit it or replace it with your own code.`;
+
+export const EXAMPLES: readonly Example[] = RAW.map((e) => ({
+  ...e,
+  code: `${exampleHeader(e.title)}\n${e.code}`,
+  // The header pushes everything down one line, and breakpoints move with it.
+  breakpoints: e.breakpoints?.map((line) => line + 1),
+}));

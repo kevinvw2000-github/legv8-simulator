@@ -53,6 +53,15 @@ describe('example data', () => {
     }
   });
 
+  it('every example starts by saying it is an example', () => {
+    for (const ex of EXAMPLES) {
+      expect(ex.code.split('\n')[0], ex.id).toBe(`// EXAMPLE: ${ex.title}. Edit it or replace it with your own code.`);
+    }
+    // The extra line didn't move the breakpoints off their instructions.
+    expect(byId('bug-save-lr').breakpoints).toEqual([11]);
+    expect(byId('bug-off-by-one').breakpoints).toEqual([12]);
+  });
+
   it('only the Full LEGv8 example needs Full LEGv8', () => {
     for (const ex of EXAMPLES) {
       const needsFull = findFullOnly(ex.code).length > 0;
@@ -98,7 +107,7 @@ describe('examples do what they say', () => {
     expect(m.state.callWarning).toBeNull();
     m.step(); // the bad return
     expect(m.state.callWarning).toBe(
-      'BR X30 went to line 10 (0x14), but Outer should return to line 6 (0x8). X30 may have been ' +
+      'BR X30 went to line 11 (0x14), but Outer should return to line 7 (0x8). X30 may have been ' +
         'overwritten by a nested BL without being saved and restored.',
     );
     for (let i = 0; i < 300; i++) m.step();

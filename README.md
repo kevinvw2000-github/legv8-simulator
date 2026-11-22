@@ -77,7 +77,7 @@ bug examples are meant to be stepped through: for instance the `X30` one stops a
 return and the Call stack panel explains what went wrong. Opening an example never replaces your own program: it
 shows the same banner as a shared link, and **Keep it** or **Back to my program** decides what happens next (an
 example that needs a different Compatibility setting switches it and says so). They are original programs, written
-for this simulator.
+for this simulator, and each one (like the starting demo) begins with a comment saying it's an example.
 
 **Compatibility** (top bar) chooses what the simulator accepts and how it behaves:
 

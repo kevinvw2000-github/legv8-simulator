@@ -40,6 +40,22 @@ test('the menu lists the examples by group', async ({ page }) => {
   ]);
 });
 
+test('the demo and every example start by saying they are examples', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await expect(page.locator('.cm-line').first()).toHaveText('// EXAMPLE: Sum an array. Edit it or replace it with your own code.');
+
+  const options = await menu(page).locator('optgroup option').evaluateAll((els) =>
+    els.map((e) => [(e as HTMLOptionElement).value, (e as HTMLOptionElement).textContent ?? ''] as [string, string]),
+  );
+  expect(options).toHaveLength(12);
+  for (const [id, title] of options) {
+    await pick(page, id);
+    await expect(page.locator('.cm-line').first(), id).toHaveText(`// EXAMPLE: ${title}. Edit it or replace it with your own code.`);
+  }
+});
+
 test('loading an example brings its code, values, watches and expected results, and keeps your work', async ({ page }) => {
   await load(page, 'arm');
   await pick(page, 'sum-array');
@@ -141,10 +157,10 @@ test('forgetting X30: the call stack warns after the bad return', async ({ page 
   await enter(page);
   await page.getByRole('button', { name: 'Run' }).click();
   await expect(page.locator('#status')).toHaveText('Paused');
-  await expect(page.locator('#console')).toHaveText('Paused at breakpoint on line 10.');
+  await expect(page.locator('#console')).toHaveText('Paused at breakpoint on line 11.');
   await expect(page.locator('.calls .call-warning')).toHaveCount(0);
   await step(page).click(); // the BR X30 that goes to the wrong place
-  await expect(page.locator('.calls .call-warning')).toContainText('BR X30 went to line 10 (0x14), but Outer should return to line 6 (0x8).');
+  await expect(page.locator('.calls .call-warning')).toContainText('BR X30 went to line 11 (0x14), but Outer should return to line 7 (0x8).');
 });
 
 test('the fix finishes cleanly with no warning', async ({ page }) => {

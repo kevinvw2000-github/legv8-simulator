@@ -16,7 +16,7 @@ import { ExpectedPanel, NO_EXPECTED, type ExpectedSettings } from './expectedPan
 import { HelpPanel } from './helpPanel';
 import { simulationHover, type HoverContext } from './hover';
 import { convertToZyBooks, findFullOnly, parseHint } from '../core/fullmode';
-import { EXAMPLE_GROUPS, EXAMPLES, type Example } from '../core/examples';
+import { EXAMPLE_GROUPS, EXAMPLES, exampleHeader, type Example } from '../core/examples';
 import { MODE_INFO } from '../core/help';
 import { checkExpected, keyOrder, summarize, type CheckResult, type ExpectedKind } from '../core/expected';
 import { formatValue } from '../core/bits';
@@ -45,6 +45,7 @@ const STORAGE_KEY = 'legv8-sim:v1';
 
 const DEFAULT: Saved = {
   code: [
+    exampleHeader('Sum an array'),
     '// Sum X19 doublewords starting at address X20; result in X0.',
     '// Change the inputs in the Registers and Memory panels.',
     'ADD X0, XZR, XZR      // sum = 0',
