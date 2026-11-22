@@ -9,22 +9,6 @@ textbook instructions zyBooks doesn't have.
 
 This is an independent project. It isn't affiliated with or endorsed by zyBooks, Wiley, Elsevier or Arm.
 
-## Quick start
-
-```bash
-npm install
-npm run dev        # http://localhost:5173
-```
-
-| Command | What it does |
-|---|---|
-| `npm run dev` | Dev server with hot reload |
-| `npm run build` | Typecheck and build static files into `dist/`, which can be hosted on any static web host |
-| `npm run preview` | Serve the built `dist/` locally (it needs a web server; opening the file directly won't run) |
-| `npm test` | Unit and conformance tests (Vitest) |
-| `npm run test:e2e` | Browser tests (Playwright; first run `npx playwright install chromium`) |
-| `npm run typecheck` | TypeScript only |
-
 ## Using it
 
 1. Write assembly in the editor. Set starting values in **Registers** and **Memory** with **+ Add**.
@@ -166,7 +150,27 @@ Two deliberate interface differences:
 - After a runtime error, the registers and memory stay visible (zyBooks resets them).
 - The interface has no step limit. Run continues until you press Pause. `runProgram()` accepts a `maxSteps` option.
 
-## Project layout
+## For developers
+
+You don't need any of this to use the simulator. It's for running or changing the code on your own computer.
+
+### Quick start
+
+```bash
+npm install
+npm run dev        # http://localhost:5173
+```
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Dev server with hot reload |
+| `npm run build` | Typecheck and build static files into `dist/`, which can be hosted on any static web host |
+| `npm run preview` | Serve the built `dist/` locally (it needs a web server; opening the file directly won't run) |
+| `npm test` | Unit and conformance tests (Vitest) |
+| `npm run test:e2e` | Browser tests (Playwright; first run `npx playwright install chromium`) |
+| `npm run typecheck` | TypeScript only |
+
+### Project layout
 
 ```
 src/core/   parser, instruction table, execution, machine state, import/export (no DOM)
@@ -177,7 +181,7 @@ tests/e2e/      Playwright interface tests
 docs/COMPATIBILITY.md   the zyBooks behaviors this simulator reproduces
 ```
 
-### Conformance tests
+#### Conformance tests
 
 Each JSON file in `tests/golden/` holds programs and the results the zyBooks simulator produced for them. The
 test runner replays every case. To add one, run a program in zyBooks, record the registers, memory or error it
@@ -193,7 +197,7 @@ Cases can use `"sourceFile"` instead of `"source"`. Cases whose source file is m
 `*.local.*` (for example `my-lab.local.json` and `my-lab.local.s`) are gitignored, so you can keep conformance
 cases built from graded coursework on your own machine without publishing them.
 
-## Deploying
+### Deploying
 
 `npm run build` produces a static site in `dist/` that any static host can serve. The included workflow
 [.github/workflows/deploy.yml](.github/workflows/deploy.yml) runs the tests, builds, and publishes to GitHub Pages
